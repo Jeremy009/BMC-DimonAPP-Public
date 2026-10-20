@@ -4,6 +4,18 @@
 
 Worker administration and Dimona declarations for Brussels Monkeys Climbing ASBL.
 
+![Admin dashboard](docs/screenshots/04-admin-dashboard.png)
+
+| Login | Declaring an activity (worker) |
+|---|---|
+| ![Login](docs/screenshots/01-login.png) | ![Declaring an activity](docs/screenshots/02-worker-declare.png) |
+| **Monthly overview (worker)** | **Monthly report and payment export (admin)** |
+| ![Monthly overview](docs/screenshots/03-worker-overview.png) | ![Monthly report](docs/screenshots/05-admin-report.png) |
+| **Activities (admin)** | **Workers (admin)** |
+| ![Activities](docs/screenshots/06-admin-activities.png) | ![Workers](docs/screenshots/07-admin-workers.png) |
+
+The screenshots use fictional demo data in the `TEST` environment; `tools/screenshots/take-screenshots.sh` regenerates them (uv and Docker needed).
+
 The application is built phase by phase from the specification in `docs/`.
 
 | Path | What it is |
@@ -15,6 +27,7 @@ The application is built phase by phase from the specification in `docs/`.
 | `src/dimonapp/assets/` | The two logos: `favicon.png` and `logoarriere.png`, plus the resized copies of the favicon (`apple-touch-icon.png`, `tab-icon.png`) |
 | `docs/openapi_dimona_v2.yaml` | Official RSZ specification of the Dimona REST service |
 | `.env.example` | Template for the local, git-ignored `.env` |
+| `docs/screenshots/`, `tools/screenshots/` | README screenshots and the script that regenerates them with fake data |
 
 ## Getting started
 
