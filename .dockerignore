@@ -1,0 +1,17 @@
+# Nothing secret or local may enter the image (R2.7).
+.env
+.env.*
+.streamlit/secrets.toml
+local_storage/
+*.pem
+*.p12
+
+# Not needed at runtime.
+.git/
+.venv/
+docs/
+tests/
+**/__pycache__/
+.pytest_cache/
+.ruff_cache/
+.DS_Store

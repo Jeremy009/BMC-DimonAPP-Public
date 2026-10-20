@@ -1,0 +1,2773 @@
+openapi: 3.0.2
+info:
+  title: Dimona v2 - REST API
+  description: This API provides resources related to the Dimona and Personnel File.
+  contact:
+    name: Dimona support
+    url: https://www.socialsecurity.be/site_fr/employer/applics/dimona/introduction/webservice.htm
+    email: tbdimona@smals.be
+  version: 2.0.0
+servers:
+- url: https://services.socialsecurity.be/REST/dimona/v2
+- url: https://services-sim.socialsecurity.be/REST/dimona/v2
+tags:
+- name: Monitoring
+- name: Declarations
+- name: DailyRegistration
+- name: Periods
+- name: Relations
+paths:
+  /health:
+    get:
+      tags:
+      - Monitoring
+      summary: Check health of the service
+      description: This resource is only available to supervision users
+      externalDocs:
+        url: https://www.belgif.be/specification/rest/api-guide/#health
+      operationId: checkHealth
+      responses:
+        "200":
+          description: The service is UP or DEGRADED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+              examples:
+                responseUp:
+                  value:
+                    status: UP
+                responseDegraded:
+                  value:
+                    status: DEGRADED
+        "500":
+          description: a problem
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        "503":
+          description: The service is DOWN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+              examples:
+                responseDown:
+                  value:
+                    status: DOWN
+        default:
+          description: a problem
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      security: []
+  /declarations:
+    post:
+      tags:
+      - Declarations
+      summary: Create a Dimona or Daily Registration Declaration
+      description: "Creation of a Dimona Declaration (IN, OUT, UPDATE or CANCEL) or\
+        \ a Daily Registration (IN, UPDATE or CANCEL)"
+      operationId: submitDeclaration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeclarationRequest'
+        required: true
+      responses:
+        "201":
+          description: "Declaration received, you can find the declaration number\
+            \ in the 'Location' header of the response."
+        "400":
+          description: A problem caused by invalid input
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/InputValidationProblem'
+        default:
+          description: a problem
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      security:
+      - Oauth:
+        - scope:dimona:declaration:declarant
+        - scope:dimona:declaration:ws-restdimona:dimonaenterprisedeclare
+        - scope:dimona:declaration:ws-restdimona:dimonarepresentativedeclare
+        - scope:dimona:declaration:ws-restdimona:dimonaprofessionaldeclare
+      x-oauth2-required-scopes: any
+      x-content-type: application/json
+  /declarations/search:
+    post:
+      tags:
+      - Declarations
+      summary: Retrieve a list of Dimona Declarations
+      description: "Retrieve a list of Dimona declarations based on specific search\
+        \ parameters. You need, at least, the employerId, the enterpriseNumber, the\
+        \ entrepriseNumber of a userEnterprise or the ssin of a worker."
+      operationId: searchDeclarations
+      parameters:
+      - name: pageSize
+        in: query
+        description: Maximum number of items per page desired by client; default value
+          50.
+        required: false
+        style: form
+        explode: true
+        schema:
+          type: integer
+          default: 50
+      - name: page
+        in: query
+        description: The index of page to be retrieved
+        required: false
+        style: form
+        explode: true
+        schema:
+          type: integer
+          default: 1
+      - name: sort
+        in: query
+        description: Sort the results among a property. Use the prefix '-' to sort
+          in descending order. Allowed property is creationDate.
+        required: false
+        style: form
+        explode: true
+        schema:
+          type: array
+          items:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeclarationSearchRequest'
+        required: true
+      responses:
+        "200":
+          description: List of Dimona declarations and their details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/searchDeclarations_200_response'
+        "400":
+          description: A problem caused by invalid input
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/InputValidationProblem'
+        default:
+          description: a problem
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      security:
+      - Oauth:
+        - scope:dimona:declaration:consult
+        - scope:dimona:declaration:ws-restdimona:dimonaenterpriseconsult
+        - scope:dimona:declaration:ws-restdimona:dimonarepresentativeconsult
+        - scope:dimona:declaration:ws-restdimona:dimonaprofessionalconsult
+        - scope:dimona:declaration:ws-restdimona:dimonaconsultcitizen
+      x-oauth2-required-scopes: any
+      x-content-type: application/json
+  /declarations/{declarationId}:
+    get:
+      tags:
+      - Declarations
+      summary: Retrieve a Dimona Declaration
+      description: Retrieve a Dimona Declaration using the declaration id
+      operationId: getDeclarationByDeclarationId
+      parameters:
+      - name: declarationId
+        in: path
+        description: Identification number of the Dimona declaration
+        required: true
+        style: simple
+        explode: false
+        schema:
+          minimum: 1
+          type: integer
+          format: int64
+        example: 6465484622
+      responses:
+        "200":
+          description: Dimona declaration found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeclarationResponse'
+        "404":
+          description: a problem
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: a problem
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      security:
+      - Oauth:
+        - scope:dimona:declaration:consult
+        - scope:dimona:declaration:ws-restdimona:dimonaenterpriseconsult
+        - scope:dimona:declaration:ws-restdimona:dimonarepresentativeconsult
+        - scope:dimona:declaration:ws-restdimona:dimonaprofessionalconsult
+        - scope:dimona:declaration:ws-restdimona:dimonaconsultcitizen
+      x-oauth2-required-scopes: any
+  /periods/{periodId}:
+    get:
+      tags:
+      - Periods
+      summary: Retrieve a Dimona Period
+      description: Retrieve the details of a Dimona period using the identification
+        number of the Dimona period
+      operationId: getPeriodByPeriodId
+      parameters:
+      - name: periodId
+        in: path
+        description: Identification number of the Dimona period
+        required: true
+        style: simple
+        explode: false
+        schema:
+          minimum: 1
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: Dimona period found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Period'
+        "404":
+          description: a problem
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: a problem
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      security:
+      - Oauth:
+        - scope:dimona:declaration:consult
+        - scope:dimona:declaration:ws-restdimona:dimonaenterpriseconsult
+        - scope:dimona:declaration:ws-restdimona:dimonarepresentativeconsult
+        - scope:dimona:declaration:ws-restdimona:dimonaprofessionalconsult
+        - scope:dimona:declaration:ws-restdimona:dimonaconsultcitizen
+      x-oauth2-required-scopes: any
+  /periods/search:
+    post:
+      tags:
+      - Periods
+      summary: Retrieve a list of Dimona periods
+      description: "Retrieve a list of Dimona periods between employer and worker.\
+        \ You need, at least, the employerId, the enterpriseNumber, the entrepriseNumber\
+        \ of a userEnterprise or the SSIN of a worker."
+      operationId: searchPeriods
+      parameters:
+      - name: pageSize
+        in: query
+        description: Maximum number of items per page desired by client; default value
+          50.
+        required: false
+        style: form
+        explode: true
+        schema:
+          type: integer
+          default: 50
+      - name: page
+        in: query
+        description: The index of page to be retrieved
+        required: false
+        style: form
+        explode: true
+        schema:
+          type: integer
+          default: 1
+      - name: sort
+        in: query
+        description: "Sort the results among a property. Use the prefix '-' to sort\
+          \ in descending order. Allowed properties are startDate, endDate, modificationDate"
+        required: false
+        style: form
+        explode: true
+        schema:
+          type: array
+          items:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PeriodSearchRequest'
+        required: true
+      responses:
+        "200":
+          description: List of Dimona periods and their details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/searchPeriods_200_response'
+        "400":
+          description: A problem caused by invalid input
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/InputValidationProblem'
+        default:
+          description: a problem
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      security:
+      - Oauth:
+        - scope:dimona:declaration:consult
+        - scope:dimona:declaration:ws-restdimona:dimonaenterpriseconsult
+        - scope:dimona:declaration:ws-restdimona:dimonarepresentativeconsult
+        - scope:dimona:declaration:ws-restdimona:dimonaprofessionalconsult
+        - scope:dimona:declaration:ws-restdimona:dimonaconsultcitizen
+      x-oauth2-required-scopes: any
+      x-content-type: application/json
+  /relations/search:
+    post:
+      tags:
+      - Relations
+      summary: Retrieve a list of relations between employer and worker
+      description: "Retrieve a list of relations between employer and worker. You\
+        \ need, at least, the employerId, the enterpriseNumber, the entrepriseNumber\
+        \ of a userEnterprise or the SSIN of a worker."
+      operationId: searchRelations
+      parameters:
+      - name: pageSize
+        in: query
+        description: Maximum number of items per page desired by client; default value
+          50.
+        required: false
+        style: form
+        explode: true
+        schema:
+          type: integer
+          default: 50
+      - name: page
+        in: query
+        description: The index of page to be retrieved
+        required: false
+        style: form
+        explode: true
+        schema:
+          type: integer
+          default: 1
+      - name: sort
+        in: query
+        description: "Sort the results among a property. Use the prefix '-' to sort\
+          \ in descending order. Allowed properties are startDate, endDate"
+        required: false
+        style: form
+        explode: true
+        schema:
+          type: array
+          items:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RelationSearchRequest'
+        required: true
+      responses:
+        "200":
+          description: List of worker-employer relations and their details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/searchRelations_200_response'
+        "400":
+          description: A problem caused by invalid input
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/InputValidationProblem'
+        default:
+          description: a problem
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      security:
+      - Oauth:
+        - scope:dimona:declaration:consult
+        - scope:dimona:declaration:ws-restdimona:dimonaenterpriseconsult
+        - scope:dimona:declaration:ws-restdimona:dimonarepresentativeconsult
+        - scope:dimona:declaration:ws-restdimona:dimonaprofessionalconsult
+        - scope:dimona:declaration:ws-restdimona:dimonaconsultcitizen
+      x-oauth2-required-scopes: any
+      x-content-type: application/json
+  /dailyRegistrations/{dailyRegistrationId}:
+    get:
+      tags:
+      - DailyRegistration
+      summary: Retrieve a daily registration
+      description: Retrieve the details of a daily registration using the daily registration
+        number identifier
+      operationId: getDailyRegistrationByDailyRegistrationId
+      parameters:
+      - name: dailyRegistrationId
+        in: path
+        description: Number that uniquely identifies a daily registration
+        required: true
+        style: simple
+        explode: false
+        schema:
+          minimum: 1
+          type: integer
+          format: int64
+        example: 234567891234
+        x-glossary: "01085"
+      responses:
+        "200":
+          description: Daily registration found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyRegistration'
+        "404":
+          description: a problem
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: a problem
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      security:
+      - Oauth:
+        - scope:dimona:declaration:consult
+        - scope:dimona:declaration:ws-restdimona:dimonaenterpriseconsult
+        - scope:dimona:declaration:ws-restdimona:dimonarepresentativeconsult
+        - scope:dimona:declaration:ws-restdimona:dimonaprofessionalconsult
+        - scope:dimona:declaration:ws-restdimona:dimonaconsultcitizen
+      x-oauth2-required-scopes: any
+  /dailyRegistrations:
+    get:
+      tags:
+      - DailyRegistration
+      summary: Retrieve a list of daily registrations
+      description: Retrieve the details of daily registrations thanks to multiple
+        parameters
+      operationId: searchDailyRegistrations
+      parameters:
+      - name: periodId
+        in: query
+        description: Identification number of the Dimona period
+        required: true
+        style: form
+        explode: true
+        schema:
+          minimum: 1
+          type: integer
+          format: int64
+        example: 123456789123
+        x-glossary: "00913"
+      - name: activeFromDate
+        in: query
+        description: Search for active daily registrations starting from this date
+        required: false
+        style: form
+        explode: true
+        schema:
+          pattern: "^\\d{4}-\\d{2}-\\d{2}$"
+          type: string
+        example: 2000-12-30
+      - name: activeToDate
+        in: query
+        description: Search for active daily registrations up to this date
+        required: false
+        style: form
+        explode: true
+        schema:
+          pattern: "^\\d{4}-\\d{2}-\\d{2}$"
+          type: string
+        example: 2000-12-31
+      - name: creationDate
+        in: query
+        description: Search for active daily registrations created on this date
+        required: false
+        style: form
+        explode: true
+        schema:
+          pattern: "^\\d{4}-\\d{2}-\\d{2}$"
+          type: string
+        example: 2000-12-20
+      - name: page
+        in: query
+        description: Number of requested page in a paged resource collection. Page
+          numbers are 1-based.
+        required: false
+        style: form
+        explode: true
+        schema:
+          minimum: 1
+          type: integer
+          default: 1
+      - name: pageSize
+        in: query
+        description: Number of items to retrieve on each page
+        required: false
+        style: form
+        explode: true
+        schema:
+          type: integer
+          default: 50
+      - name: sort
+        in: query
+        description: Sort the results among a property. Use the prefix '-' to sort
+          in descending order. Allowed properties are startDate
+        required: false
+        style: form
+        explode: true
+        schema:
+          type: array
+          items:
+            type: string
+      responses:
+        "200":
+          description: List of daily registrations and their details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/searchDailyRegistrations_200_response'
+        "400":
+          description: A problem caused by invalid input
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/InputValidationProblem'
+        default:
+          description: a problem
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      security:
+      - Oauth:
+        - scope:dimona:declaration:consult
+        - scope:dimona:declaration:ws-restdimona:dimonaenterpriseconsult
+        - scope:dimona:declaration:ws-restdimona:dimonarepresentativeconsult
+        - scope:dimona:declaration:ws-restdimona:dimonaprofessionalconsult
+        - scope:dimona:declaration:ws-restdimona:dimonaconsultcitizen
+      x-oauth2-required-scopes: any
+components:
+  schemas:
+    Address:
+      required:
+      - houseNumber
+      - municipality
+      - postCode
+      - street
+      type: object
+      properties:
+        street:
+          type: string
+        houseNumber:
+          type: string
+        boxNumber:
+          type: string
+        postCode:
+          type: string
+        municipality:
+          $ref: '#/components/schemas/Municipality'
+        country:
+          maximum: 999
+          minimum: 100
+          type: integer
+          description: NIS code representing a country as defined by statbel.fgov.be
+      description: Address
+      example:
+        country: 231
+        street: street
+        houseNumber: houseNumber
+        municipality:
+          code: 64246
+          name: name
+        boxNumber: boxNumber
+        postCode: postCode
+    Anomaly:
+      type: object
+      properties:
+        errorId:
+          type: string
+          description: Identifier of the anomaly - See Annex 30 of the Glossary (https://www.socialsecurity.be/lambda/portail/glossaires/dimona.nsf/web/glossary_home_fr)
+          x-glossary: "00108"
+        label:
+          $ref: '#/components/schemas/LocalizedString'
+        type:
+          type: string
+          description: Type of additional information regarding the anomaly
+        value:
+          type: string
+          description: The value of the type parameter
+      description: Block containing the details of an anomaly
+      example:
+        errorId: errorId
+        label:
+          de: de
+          fr: fr
+          nl: nl
+        type: type
+        value: value
+    ConstructionControlCards:
+      required:
+      - firstMonthC32aNumber
+      - nextMonthC32aNumber
+      type: object
+      properties:
+        firstMonthC32aNumber:
+          type: string
+          description: Control card number C3.2A assigned to the worker for the beginning
+            of the Dimona period
+          x-glossary: "00663"
+        nextMonthC32aNumber:
+          type: string
+          description: Control card number C3.2A assigned to the worker for the month
+            following the month of the beginning of his Dimona period
+          x-glossary: "00664"
+      description: Block for declaring C3.2A-construction control card data
+      example:
+        firstMonthC32aNumber: firstMonthC32aNumber
+        nextMonthC32aNumber: nextMonthC32aNumber
+    DailyRegistration:
+      required:
+      - periodId
+      type: object
+      properties:
+        dailyRegistrationId:
+          minimum: 1
+          type: integer
+          description: Number that uniquely identifies a daily registration
+          format: int64
+          example: 234567891234
+          x-glossary: "01085"
+        periodId:
+          minimum: 1
+          type: integer
+          description: Identification number of the Dimona period
+          format: int64
+          example: 123456789123
+          x-glossary: "00913"
+        startDate:
+          type: string
+          description: Start date of the daily registration
+          format: date
+          example: 2000-12-30
+          x-glossary: "00910"
+        startHour:
+          pattern: "^[0-2][0-9][0-5][0-9]$"
+          type: string
+          description: Starting time of the daily registration
+          example: "1545"
+          x-glossary: "00777"
+        endDate:
+          type: string
+          description: End date of the daily registration
+          format: date
+          example: 2000-12-31
+          x-glossary: "00911"
+        endHour:
+          pattern: "^[0-2][0-9][0-5][0-9]$"
+          type: string
+          description: Finishing time of the daily registration
+          example: "1645"
+          x-glossary: "00778"
+        creationDate:
+          type: string
+          description: Creation date of the daily registration
+          format: date
+          example: 2000-12-29
+        isCanceled:
+          type: boolean
+          description: "Filter to include cancelled daily registrations. By default,\
+            \ all are returned"
+          example: true
+      description: Block for the data necessary for daily registrations
+      example:
+        periodId: 123456789123
+        endHour: "1645"
+        isCanceled: true
+        endDate: 2000-12-31T00:00:00.000+00:00
+        startHour: "1545"
+        creationDate: 2000-12-29T00:00:00.000+00:00
+        dailyRegistrationId: 234567891234
+        startDate: 2000-12-30T00:00:00.000+00:00
+      x-glossary: "90480"
+    DailyRegistrationCancel:
+      required:
+      - dailyRegistrationId
+      type: object
+      properties:
+        references:
+          $ref: '#/components/schemas/References'
+        dailyRegistrationId:
+          minimum: 1
+          type: integer
+          description: Number that uniquely identifies a daily registration
+          format: int64
+          example: 234567891234
+          x-glossary: "01085"
+      description: Block containing the information necessary for a daily registration
+        cancel
+      example:
+        references:
+          employer: employer
+          worker: worker
+          declaration: declaration
+        dailyRegistrationId: 234567891234
+    DailyRegistrationIn:
+      required:
+      - periodId
+      - startDate
+      - startHour
+      type: object
+      properties:
+        references:
+          $ref: '#/components/schemas/References'
+        periodId:
+          minimum: 1
+          type: integer
+          description: Identification number of the Dimona period
+          format: int64
+          example: 123456789123
+          x-glossary: "00913"
+        startDate:
+          type: string
+          description: Start date of the daily registration
+          format: date
+          example: 2000-12-30
+          x-glossary: "00910"
+        startHour:
+          pattern: "^[0-2][0-9][0-5][0-9]$"
+          type: string
+          description: Starting time of the daily registration
+          example: "1545"
+          x-glossary: "00777"
+        endDate:
+          type: string
+          description: End date of the daily registration
+          format: date
+          example: 2000-12-31
+          x-glossary: "00911"
+        endHour:
+          pattern: "^[0-2][0-9][0-5][0-9]$"
+          type: string
+          description: Finishing time of the daily registration
+          example: "1645"
+          x-glossary: "00778"
+      description: Block containing the information necessary for a daily registration
+        declaration for entry of service
+      example:
+        periodId: 123456789123
+        endHour: "1645"
+        references:
+          employer: employer
+          worker: worker
+          declaration: declaration
+        endDate: 2000-12-31T00:00:00.000+00:00
+        startHour: "1545"
+        startDate: 2000-12-30T00:00:00.000+00:00
+    DailyRegistrationUpdate:
+      required:
+      - dailyRegistrationId
+      type: object
+      properties:
+        references:
+          $ref: '#/components/schemas/References'
+        dailyRegistrationId:
+          minimum: 1
+          type: integer
+          description: Number that uniquely identifies a daily registration
+          format: int64
+          example: 234567891234
+          x-glossary: "01085"
+        startDate:
+          type: string
+          description: Start date of the daily registration
+          format: date
+          example: 2000-12-30
+          x-glossary: "00910"
+        startHour:
+          pattern: "^[0-2][0-9][0-5][0-9]$"
+          type: string
+          description: Starting time of the daily registration
+          example: "1545"
+          x-glossary: "00777"
+        endDate:
+          type: string
+          description: End date of the daily registration
+          format: date
+          example: 2000-12-31
+          x-glossary: "00911"
+        endHour:
+          pattern: "^[0-2][0-9][0-5][0-9]$"
+          type: string
+          description: Finishing time of the daily registration
+          example: "1645"
+          x-glossary: "00778"
+      description: Block containing the information necessary for a daily registration
+        modification
+      example:
+        endHour: "1645"
+        references:
+          employer: employer
+          worker: worker
+          declaration: declaration
+        endDate: 2000-12-31T00:00:00.000+00:00
+        startHour: "1545"
+        dailyRegistrationId: 234567891234
+        startDate: 2000-12-30T00:00:00.000+00:00
+    DeclarationRequest:
+      type: object
+      properties:
+        dimonaIn:
+          $ref: '#/components/schemas/DimonaIn'
+        dimonaOut:
+          $ref: '#/components/schemas/DimonaOut'
+        dimonaUpdate:
+          $ref: '#/components/schemas/DimonaUpdate'
+        dimonaCancel:
+          $ref: '#/components/schemas/DimonaCancel'
+        dailyRegistrationIn:
+          $ref: '#/components/schemas/DailyRegistrationIn'
+        dailyRegistrationUpdate:
+          $ref: '#/components/schemas/DailyRegistrationUpdate'
+        dailyRegistrationCancel:
+          $ref: '#/components/schemas/DailyRegistrationCancel'
+      description: Details of a Dimona Declaration
+      example:
+        dimonaCancel:
+          periodId: 123456789123
+          references:
+            employer: employer
+            worker: worker
+            declaration: declaration
+        dailyRegistrationIn:
+          periodId: 123456789123
+          endHour: "1645"
+          references:
+            employer: employer
+            worker: worker
+            declaration: declaration
+          endDate: 2000-12-31T00:00:00.000+00:00
+          startHour: "1545"
+          startDate: 2000-12-30T00:00:00.000+00:00
+        dimonaUpdate:
+          periodId: 123456789123
+          endHour: "1645"
+          references:
+            employer: employer
+            worker: worker
+            declaration: declaration
+          endDate: 2000-12-31T00:00:00.000+00:00
+          startHour: "1545"
+          plannedDaysNumber: 111
+          plannedHoursNumber: 160
+          startDate: 2000-12-30T00:00:00.000+00:00
+        dimonaOut:
+          periodId: 123456789123
+          references:
+            employer: employer
+            worker: worker
+            declaration: declaration
+          endDate: 2000-12-31T00:00:00.000+00:00
+        dimonaIn:
+          endHour: "1645"
+          features:
+            workerType: STU
+            subEntityNumber: "1234567891"
+            userEnterprise:
+              employerId: 480497095
+              address:
+                country: 231
+                street: street
+                houseNumber: houseNumber
+                municipality:
+                  code: 64246
+                  name: name
+                boxNumber: boxNumber
+                postCode: postCode
+              jointCommissionNumber: "124"
+              enterpriseNumber: enterpriseNumber
+              name: name
+            jointCommissionNumber: "124"
+          constructionControlCards:
+            firstMonthC32aNumber: firstMonthC32aNumber
+            nextMonthC32aNumber: nextMonthC32aNumber
+          references:
+            employer: employer
+            worker: worker
+            declaration: declaration
+          endDate: 2000-12-31T00:00:00.000+00:00
+          startHour: "1545"
+          plannedDaysNumber: 111
+          plannedHoursNumber: 160
+          studentPlaceOfWork:
+            address:
+              country: 231
+              street: street
+              houseNumber: houseNumber
+              municipality:
+                code: 64246
+                name: name
+              boxNumber: boxNumber
+              postCode: postCode
+            name: name
+          smallStatutesInformation:
+            employmentNature: worker
+            activityWithRisk: 401
+            workerStatus: F1
+          startDate: 2000-12-30T00:00:00.000+00:00
+        dailyRegistrationCancel:
+          references:
+            employer: employer
+            worker: worker
+            declaration: declaration
+          dailyRegistrationId: 234567891234
+        dailyRegistrationUpdate:
+          endHour: "1645"
+          references:
+            employer: employer
+            worker: worker
+            declaration: declaration
+          endDate: 2000-12-31T00:00:00.000+00:00
+          startHour: "1545"
+          dailyRegistrationId: 234567891234
+          startDate: 2000-12-30T00:00:00.000+00:00
+      allOf:
+      - $ref: '#/components/schemas/DimonaBase'
+      oneOf:
+      - required:
+        - dimonaIn
+        - employer
+        - worker
+      - required:
+        - dimonaOut
+      - required:
+        - dimonaUpdate
+      - required:
+        - dimonaCancel
+      - required:
+        - dailyRegistrationIn
+      - required:
+        - dailyRegistrationUpdate
+      - required:
+        - dailyRegistrationCancel
+    DeclarationResponse:
+      type: object
+      description: Details of a Dimona Declaration
+      allOf:
+      - $ref: '#/components/schemas/DimonaBase'
+      - type: object
+        properties:
+          dimonaIn:
+            $ref: '#/components/schemas/DimonaIn'
+          dimonaOut:
+            $ref: '#/components/schemas/DimonaOut'
+          dimonaUpdate:
+            $ref: '#/components/schemas/DimonaUpdate'
+          dimonaCancel:
+            $ref: '#/components/schemas/DimonaCancel'
+          dailyRegistrationIn:
+            $ref: '#/components/schemas/DailyRegistrationIn'
+          dailyRegistrationUpdate:
+            $ref: '#/components/schemas/DailyRegistrationUpdate'
+          dailyRegistrationCancel:
+            $ref: '#/components/schemas/DailyRegistrationCancel'
+      oneOf:
+      - required:
+        - dimonaIn
+        - employer
+        - worker
+      - required:
+        - dimonaOut
+      - required:
+        - dimonaUpdate
+      - required:
+        - dimonaCancel
+      - required:
+        - dailyRegistrationIn
+      - required:
+        - dailyRegistrationUpdate
+      - required:
+        - dailyRegistrationCancel
+    DeclarationSearchRequest:
+      type: object
+      properties:
+        employer:
+          $ref: '#/components/schemas/EmployerSearch'
+        worker:
+          $ref: '#/components/schemas/WorkerSearch'
+        periodId:
+          minimum: 1
+          type: integer
+          description: Identification number of the Dimona period
+          format: int64
+          example: 123456789123
+          x-glossary: "00913"
+        dailyRegistrationId:
+          minimum: 1
+          type: integer
+          description: Number that uniquely identifies a daily registration
+          format: int64
+          example: 234567891234
+          x-glossary: "01085"
+        references:
+          $ref: '#/components/schemas/References'
+        fromCreationDate:
+          type: string
+          description: Start date used to filter the search
+          format: date
+          example: 2000-12-31
+        toCreationDate:
+          type: string
+          description: End date used to filter the search
+          format: date
+          example: 2000-12-31
+        channel:
+          type: array
+          description: The channel used to declare a dimona
+          example:
+          - SFTP
+          - WRST
+          items:
+            type: string
+            enum:
+            - DEF
+            - FTP
+            - MQL
+            - ISA
+            - WNS
+            - WSE
+            - WSM
+            - VOC
+            - SMS
+            - PRN
+            - MAI
+            - FTP-C
+            - ISA-C
+            - MQL-C
+            - DBI
+            - WSXT
+            - SFTP
+            - MTOM
+            - BATCH
+            - MOB
+            - WNSM
+            - WRST
+            x-ignore-rules:
+              cod-design: Ignore warning for lowerCamelCase format
+          x-glossary: "00737"
+        dimonaDeclarationType:
+          type: array
+          description: Type of Dimona declaration
+          example:
+          - dimonaIn
+          - dimonaUpdate
+          items:
+            type: string
+            enum:
+            - dimonaIn
+            - dimonaOut
+            - dimonaUpdate
+            - dimonaCancel
+            - dimonaDelete
+            - dailyRegistrationIn
+            - dailyRegistrationUpdate
+            - dailyRegistrationCancel
+        dimonaDeclarationStatus:
+          type: array
+          description: The status of a Dimona declaration
+          example:
+          - blocking
+          - warning
+          items:
+            type: string
+            enum:
+            - accepted
+            - blocking
+            - warning
+            - sigeDisPending
+            - classic
+      description: Search parameters available when searching for a Dimona declaration
+      example:
+        periodId: 123456789123
+        fromCreationDate: 2000-12-31T00:00:00.000+00:00
+        toCreationDate: 2000-12-31T00:00:00.000+00:00
+        references:
+          employer: employer
+          worker: worker
+          declaration: declaration
+        channel:
+        - SFTP
+        - WRST
+        employer:
+          employerId: 480497095
+          enterpriseNumber: enterpriseNumber
+          excludedSectorIndicators:
+          - publicPla
+          - publicPla
+          includedSectorIndicators:
+          - publicPla
+          - publicPla
+        worker:
+          ssin: ssin
+          familyName: Doe
+          givenName: John
+        dimonaDeclarationType:
+        - dimonaIn
+        - dimonaUpdate
+        dailyRegistrationId: 234567891234
+        dimonaDeclarationStatus:
+        - blocking
+        - warning
+    DeclarationStatus:
+      type: object
+      properties:
+        declarationId:
+          minimum: 1
+          type: integer
+          description: Identification number of the Dimona declaration
+          format: int64
+          example: 678519516
+        result:
+          type: string
+          description: "Result of the processing of the declaration. (A - accepted,\
+            \ W - accepted with warning, B - refused and S - Waiting because an identification\
+            \ request sent to SIGeDIS)"
+        period:
+          $ref: '#/components/schemas/DeclarationStatus_period'
+        dailyRegistration:
+          $ref: '#/components/schemas/DeclarationStatus_dailyRegistration'
+        anomalies:
+          type: array
+          description: List of anomalies
+          items:
+            $ref: '#/components/schemas/Anomaly'
+        informationsCollection:
+          type: array
+          description: List of additional information
+          items:
+            $ref: '#/components/schemas/Information'
+      description: Block containing the data relating to the declaration processing.
+        When retrieving a declaration this is filled up by the service.
+    Detail:
+      type: object
+      properties:
+        kind:
+          type: object
+          description: Provided details category
+        message:
+          type: object
+          description: Message details
+        ref:
+          type: object
+          description: Any specific references if applicable
+        value:
+          type: object
+          description: Any values if applicable
+      description: 'Generic block which provides additional details about a parent
+        block '
+    DimonaBase:
+      type: object
+      properties:
+        employer:
+          $ref: '#/components/schemas/Employer'
+        worker:
+          $ref: '#/components/schemas/WorkerDeclaration'
+        declarationStatus:
+          $ref: '#/components/schemas/DeclarationStatus'
+      description: The base object for all different Dimona types.
+    DimonaCancel:
+      required:
+      - periodId
+      type: object
+      properties:
+        references:
+          $ref: '#/components/schemas/References'
+        periodId:
+          minimum: 1
+          type: integer
+          description: Number that uniquely identifies a Dimona period. This number
+            is automatically assigned to the Dimona IN declaration that generates
+            the period
+          format: int64
+          example: 123456789123
+          x-glossary: "00913"
+      description: Block containing the information necessary for a declaration Dimona
+        cancellation of the relationship between an employer and a worker
+      example:
+        periodId: 123456789123
+        references:
+          employer: employer
+          worker: worker
+          declaration: declaration
+    DimonaFeatures:
+      required:
+      - workerType
+      type: object
+      properties:
+        jointCommissionNumber:
+          maxLength: 3
+          minLength: 0
+          type: string
+          description: "Joint commission number. Watch the administration instructions\
+            \ at: https://www.socialsecurity.be/employer/instructions/dmfa/fr/latest/instructions/obligations/obligations_nsso/dimona/principaldata.html#h22"
+          example: "124"
+          x-glossary: "00046"
+        workerType:
+          maxLength: 3
+          minLength: 0
+          type: string
+          description: "The worker type. Watch the administration instructions at:\
+            \ https://www.socialsecurity.be/employer/instructions/dmfa/fr/latest/instructions/obligations/obligations_nsso/dimona/principaldata.html#h22"
+          example: STU
+          x-glossary: "00655"
+        subEntityNumber:
+          pattern: "^[0-9]{1,10}$"
+          type: string
+          description: For employers ORPSS you need to define sometimes the sub entity
+            number of the employer.
+          example: "1234567891"
+          x-glossary: "00652"
+        userEnterprise:
+          $ref: '#/components/schemas/UserEnterprise'
+      description: Block to declare the characteristics of the Dimona period
+      example:
+        workerType: STU
+        subEntityNumber: "1234567891"
+        userEnterprise:
+          employerId: 480497095
+          address:
+            country: 231
+            street: street
+            houseNumber: houseNumber
+            municipality:
+              code: 64246
+              name: name
+            boxNumber: boxNumber
+            postCode: postCode
+          jointCommissionNumber: "124"
+          enterpriseNumber: enterpriseNumber
+          name: name
+        jointCommissionNumber: "124"
+    DimonaIn:
+      required:
+      - features
+      - startDate
+      type: object
+      properties:
+        references:
+          $ref: '#/components/schemas/References'
+        startDate:
+          type: string
+          description: Start date of the Dimona period
+          format: date
+          example: 2000-12-30
+          x-glossary: "00910"
+        startHour:
+          pattern: "^[0-2][0-9][0-5][0-9]$"
+          type: string
+          description: Starting time of the Dimona period in HHMM format
+          example: "1545"
+          x-glossary: "00777"
+        endDate:
+          type: string
+          description: End date of the Dimona period
+          format: date
+          example: 2000-12-31
+          x-glossary: "00911"
+        endHour:
+          pattern: "^[0-2][0-9][0-5][0-9]$"
+          type: string
+          description: Finishing time of the Dimona period
+          example: "1645"
+          x-glossary: "00778"
+        plannedDaysNumber:
+          maximum: 999
+          minimum: 1
+          type: integer
+          description: Number of work days planned by the employer over the declared
+            Dimona period
+          format: int32
+          example: 111
+          x-glossary: "01017"
+        plannedHoursNumber:
+          maximum: 999
+          minimum: 1
+          type: integer
+          description: Number of hours of work planned by the employer over the declared
+            Dimona period
+          format: int32
+          example: 160
+          x-glossary: "01135"
+        features:
+          $ref: '#/components/schemas/DimonaFeatures'
+        constructionControlCards:
+          $ref: '#/components/schemas/ConstructionControlCards'
+        studentPlaceOfWork:
+          $ref: '#/components/schemas/StudentPlaceOfWork'
+        smallStatutesInformation:
+          $ref: '#/components/schemas/SmallStatutesInformation'
+      description: Block containing the information necessary for a Dimona declaration
+        of entry into service
+      example:
+        endHour: "1645"
+        features:
+          workerType: STU
+          subEntityNumber: "1234567891"
+          userEnterprise:
+            employerId: 480497095
+            address:
+              country: 231
+              street: street
+              houseNumber: houseNumber
+              municipality:
+                code: 64246
+                name: name
+              boxNumber: boxNumber
+              postCode: postCode
+            jointCommissionNumber: "124"
+            enterpriseNumber: enterpriseNumber
+            name: name
+          jointCommissionNumber: "124"
+        constructionControlCards:
+          firstMonthC32aNumber: firstMonthC32aNumber
+          nextMonthC32aNumber: nextMonthC32aNumber
+        references:
+          employer: employer
+          worker: worker
+          declaration: declaration
+        endDate: 2000-12-31T00:00:00.000+00:00
+        startHour: "1545"
+        plannedDaysNumber: 111
+        plannedHoursNumber: 160
+        studentPlaceOfWork:
+          address:
+            country: 231
+            street: street
+            houseNumber: houseNumber
+            municipality:
+              code: 64246
+              name: name
+            boxNumber: boxNumber
+            postCode: postCode
+          name: name
+        smallStatutesInformation:
+          employmentNature: worker
+          activityWithRisk: 401
+          workerStatus: F1
+        startDate: 2000-12-30T00:00:00.000+00:00
+    DimonaOut:
+      required:
+      - endDate
+      - periodId
+      type: object
+      properties:
+        references:
+          $ref: '#/components/schemas/References'
+        periodId:
+          minimum: 1
+          type: integer
+          description: Number that uniquely identifies a Dimona period. This number
+            is automatically assigned to the Dimona IN declaration that generates
+            the period
+          format: int64
+          example: 123456789123
+          x-glossary: "00913"
+        endDate:
+          type: string
+          description: End date of the Dimona period
+          format: date
+          example: 2000-12-31
+          x-glossary: "00911"
+      description: Block containing the information needed for a Dimona declaration
+        of end of the employer-worker relationship
+      example:
+        periodId: 123456789123
+        references:
+          employer: employer
+          worker: worker
+          declaration: declaration
+        endDate: 2000-12-31T00:00:00.000+00:00
+    DimonaUpdate:
+      required:
+      - periodId
+      type: object
+      properties:
+        references:
+          $ref: '#/components/schemas/References'
+        periodId:
+          minimum: 1
+          type: integer
+          description: Number that uniquely identifies a Dimona period. This number
+            is automatically assigned to the Dimona IN declaration that generates
+            the period
+          format: int64
+          example: 123456789123
+          x-glossary: "00913"
+        startDate:
+          type: string
+          description: Start date of the Dimona period
+          format: date
+          example: 2000-12-30
+          x-glossary: "00910"
+        startHour:
+          pattern: "^[0-2][0-9][0-5][0-9]$"
+          type: string
+          description: Starting time of the Dimona period
+          example: "1545"
+          x-glossary: "00777"
+        endDate:
+          type: string
+          description: End date of the Dimona period
+          format: date
+          example: 2000-12-31
+          x-glossary: "00911"
+        endHour:
+          pattern: "^[0-2][0-9][0-5][0-9]$"
+          type: string
+          description: Finishing time of the Dimona period
+          example: "1645"
+          x-glossary: "00778"
+        plannedDaysNumber:
+          maximum: 999
+          minimum: 1
+          type: integer
+          description: Number of work days planned by the employer over the declared
+            Dimona period
+          format: int32
+          example: 111
+          x-glossary: "01017"
+        plannedHoursNumber:
+          maximum: 999
+          minimum: 1
+          type: integer
+          description: Number of hours of work planned by the employer over the declared
+            Dimona period
+          format: int32
+          example: 160
+          x-glossary: "01135"
+      description: Block containing the information necessary for a Dimona declaration
+        of modification of an employer-worker relationship
+      example:
+        periodId: 123456789123
+        endHour: "1645"
+        references:
+          employer: employer
+          worker: worker
+          declaration: declaration
+        endDate: 2000-12-31T00:00:00.000+00:00
+        startHour: "1545"
+        plannedDaysNumber: 111
+        plannedHoursNumber: 160
+        startDate: 2000-12-30T00:00:00.000+00:00
+    Employer:
+      type: object
+      properties:
+        employerId:
+          maximum: 5999999999
+          minimum: 197
+          type: integer
+          description: "Definitive or provisional NSSO number, assigned to each registered\
+            \ employer or local or provincial administration."
+          format: int64
+        enterpriseNumber:
+          pattern: "^[0|1]?\\d{9}$"
+          type: string
+          description: Identifier issued by CBE for a registered organization
+      description: Block for declaring employer identification data. Required for
+        a Dimona IN. When retrieving a declaration this is filled up by the service.
+        You need to fill at least employerId or enterpriseNumber.
+      example:
+        employerId: 480497095
+        enterpriseNumber: enterpriseNumber
+    EmployerSearch:
+      type: object
+      properties:
+        employerId:
+          maximum: 5999999999
+          minimum: 197
+          type: integer
+          description: "Definitive or provisional NSSO number, assigned to each registered\
+            \ employer or local or provincial administration."
+          format: int64
+        enterpriseNumber:
+          pattern: "^[0|1]?\\d{9}$"
+          type: string
+          description: Identifier issued by CBE for a registered organization
+        includedSectorIndicators:
+          type: array
+          description: List of sectors to be included in the search.
+          items:
+            type: string
+            enum:
+            - publicPla
+            - publicFedReg
+            - private
+        excludedSectorIndicators:
+          type: array
+          description: List of sectors to be excluded from the search.
+          items:
+            type: string
+            enum:
+            - publicPla
+            - publicFedReg
+            - private
+      description: Block for employer search
+      example:
+        employerId: 480497095
+        enterpriseNumber: enterpriseNumber
+        excludedSectorIndicators:
+        - publicPla
+        - publicPla
+        includedSectorIndicators:
+        - publicPla
+        - publicPla
+    FeaturesSearchRequest:
+      type: object
+      properties:
+        jointCommissionNumbers:
+          type: array
+          items:
+            $ref: '#/components/schemas/JointCommissionNumber'
+        excludedJointCommissionNumbers:
+          type: array
+          items:
+            $ref: '#/components/schemas/JointCommissionNumber'
+        workerTypes:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkerType'
+        excludedWorkerTypes:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkerType'
+        subEntityNumber:
+          pattern: "^[0-9]{1,10}$"
+          type: string
+          description: For employers ORPSS you need to define sometimes the sub entity
+            number of the employer.
+          example: "1234567891"
+          x-glossary: "00652"
+        userEnterpriseSearch:
+          $ref: '#/components/schemas/UserEnterpriseSearch'
+      description: Block to declare the characteristics of the Dimona period
+      example:
+        subEntityNumber: "1234567891"
+        excludedWorkerTypes:
+        - STU
+        - STU
+        jointCommissionNumbers:
+        - "124"
+        - "124"
+        excludedJointCommissionNumbers:
+        - "124"
+        - "124"
+        userEnterpriseSearch:
+          jointCommissionNumber: "124"
+          enterpriseNumber: enterpriseNumber
+          name: name
+        workerTypes:
+        - STU
+        - STU
+    Information:
+      required:
+      - type
+      - value
+      type: object
+      properties:
+        type:
+          type: string
+          description: Type of additional information
+        value:
+          type: string
+          description: Value of additional information
+      description: Block containing the details of an additional information
+    JointCommissionNumber:
+      maxLength: 3
+      minLength: 0
+      type: string
+      description: "Joint commission number. Watch the administration instructions\
+        \ at: https://www.socialsecurity.be/employer/instructions/dmfa/fr/latest/instructions/obligations/obligations_nsso/dimona/principaldata.html#h22"
+      example: "124"
+      x-glossary: "00046"
+    ListResponse:
+      description: Paginated list of objects
+      allOf:
+      - $ref: '#/components/schemas/SelfLink'
+      - required:
+        - next
+        - page
+        - pageSize
+        - prev
+        - total
+        type: object
+        properties:
+          prev:
+            type: string
+            description: Previous page in a paged resource collection
+            format: uri
+          next:
+            type: string
+            description: Next page in a paged resource collection
+            format: uri
+          page:
+            type: integer
+            description: Current page
+          pageSize:
+            type: integer
+            description: Number of items retrieved
+          total:
+            type: integer
+            description: Total number of workers found
+    Municipality:
+      required:
+      - name
+      type: object
+      properties:
+        name:
+          type: string
+        code:
+          maximum: 99999
+          minimum: 10000
+          type: integer
+          description: Numeric code to identify a Belgian municipality
+      example:
+        code: 64246
+        name: name
+    Period:
+      type: object
+      properties:
+        employer:
+          $ref: '#/components/schemas/Employer'
+        worker:
+          $ref: '#/components/schemas/Worker'
+        periodId:
+          minimum: 1
+          type: integer
+          description: Identification number of the Dimona period
+          format: int64
+          example: 123456789123
+          x-glossary: "00913"
+        startDate:
+          type: string
+          description: Start date of the Dimona period
+          format: date
+          example: 2000-12-30
+          x-glossary: "00910"
+        startHour:
+          pattern: "^[0-2][0-9][0-5][0-9]$"
+          type: string
+          description: Starting time of the Dimona period
+          example: "1545"
+          x-glossary: "00777"
+        endDate:
+          type: string
+          description: End date of the Dimona period
+          format: date
+          example: 2000-12-31
+          x-glossary: "00911"
+        endHour:
+          pattern: "^[0-2][0-9][0-5][0-9]$"
+          type: string
+          description: Finishing time of the Dimona period
+          example: "1645"
+          x-glossary: "00778"
+        serviceType:
+          type: string
+          description: Filter to be used for Old Horeca Declaration
+          enum:
+          - short
+          - long
+        plannedDaysNumber:
+          maximum: 999
+          minimum: 1
+          type: integer
+          description: Number of work days planned by the employer over the declared
+            Dimona period
+          format: int32
+          example: 111
+          x-glossary: "01017"
+        plannedHoursNumber:
+          maximum: 999
+          minimum: 1
+          type: integer
+          description: Number of hours of work planned by the employer over the declared
+            Dimona period
+          format: int32
+          example: 160
+          x-glossary: "01135"
+        dimonaFeatures:
+          $ref: '#/components/schemas/DimonaFeatures'
+        constructionControlCards:
+          $ref: '#/components/schemas/ConstructionControlCards'
+        studentPlaceOfWork:
+          $ref: '#/components/schemas/StudentPlaceOfWork'
+        smallStatutesInformation:
+          $ref: '#/components/schemas/SmallStatutesInformation'
+        isCanceled:
+          type: boolean
+          description: Flag specifies if the period is canceled
+          example: true
+        isLocked:
+          type: boolean
+          description: Flag specifies if the period cannot be modified/updated by
+            an employer
+          example: true
+        isCanceledNsso:
+          type: boolean
+          description: Flag for periods cancelled by NSSO
+          example: true
+        isLate:
+          type: boolean
+          description: Flag for periods which are late compared to the service entry
+            date
+          example: true
+        isAllowedFlexiJob:
+          type: boolean
+          description: Flag for validated flexi-jobs periods
+          example: true
+        isAllowedStarterJob:
+          type: boolean
+          description: "Flag for starter job: specific conditions need to be fulfilled"
+          example: true
+        creationDate:
+          type: string
+          format: date
+          example: 2000-12-31
+        lastUpdateDate:
+          type: string
+          format: date
+          example: 2000-12-31
+        lastDimonaType:
+          type: string
+          description: Last declaration type done for specified period
+          enum:
+          - in
+          - out
+          - update
+          - cancel
+          - delete
+        anomalies:
+          type: array
+          description: List of anomalies
+          items:
+            $ref: '#/components/schemas/Anomaly'
+        anomalySeverity:
+          type: string
+          description: Type of anomaly encountered for the period
+          enum:
+          - blocking
+          - warning
+          - none
+        quotaFeatures:
+          type: array
+          description: List of quota features
+          items:
+            $ref: '#/components/schemas/QuotaFeatures'
+      example:
+        serviceType: short
+        isCanceled: true
+        endDate: 2000-12-31T00:00:00.000+00:00
+        dimonaFeatures:
+          workerType: STU
+          subEntityNumber: "1234567891"
+          userEnterprise:
+            employerId: 480497095
+            address:
+              country: 231
+              street: street
+              houseNumber: houseNumber
+              municipality:
+                code: 64246
+                name: name
+              boxNumber: boxNumber
+              postCode: postCode
+            jointCommissionNumber: "124"
+            enterpriseNumber: enterpriseNumber
+            name: name
+          jointCommissionNumber: "124"
+        lastUpdateDate: 2000-12-31T00:00:00.000+00:00
+        lastDimonaType: in
+        isCanceledNsso: true
+        constructionControlCards:
+          firstMonthC32aNumber: firstMonthC32aNumber
+          nextMonthC32aNumber: nextMonthC32aNumber
+        isLate: true
+        isLocked: true
+        employer:
+          employerId: 480497095
+          enterpriseNumber: enterpriseNumber
+        plannedHoursNumber: 160
+        smallStatutesInformation:
+          employmentNature: worker
+          activityWithRisk: 401
+          workerStatus: F1
+        worker:
+          ssin: ssin
+          nationality: 641
+          gender: null
+          familyName: Doe
+          givenName: John
+          givenNames: givenNames
+          birthDate: 2000-12-31
+        periodId: 123456789123
+        plannedDaysNumber: 111
+        isAllowedFlexiJob: true
+        isAllowedStarterJob: true
+        creationDate: 2000-12-31T00:00:00.000+00:00
+        anomalies:
+        - errorId: errorId
+          label:
+            de: de
+            fr: fr
+            nl: nl
+          type: type
+          value: value
+        - errorId: errorId
+          label:
+            de: de
+            fr: fr
+            nl: nl
+          type: type
+          value: value
+        endHour: "1645"
+        startHour: "1545"
+        anomalySeverity: blocking
+        quotaFeatures:
+        - quotaType: article17
+          exceedingQuotaDays: 111
+          exceedingQuotaHours: 160
+        - quotaType: article17
+          exceedingQuotaDays: 111
+          exceedingQuotaHours: 160
+        studentPlaceOfWork:
+          address:
+            country: 231
+            street: street
+            houseNumber: houseNumber
+            municipality:
+              code: 64246
+              name: name
+            boxNumber: boxNumber
+            postCode: postCode
+          name: name
+        startDate: 2000-12-30T00:00:00.000+00:00
+    PeriodSearchRequest:
+      type: object
+      properties:
+        employer:
+          $ref: '#/components/schemas/EmployerSearch'
+        worker:
+          $ref: '#/components/schemas/WorkerSearch'
+        features:
+          $ref: '#/components/schemas/FeaturesSearchRequest'
+        activeFromDate:
+          type: string
+          description: Search for active periods starting from this date
+          format: date
+          example: 2000-12-31
+        activeToDate:
+          type: string
+          description: Search for active periods up to this date
+          format: date
+          example: 2000-12-31
+        inOrOutOnly:
+          type: boolean
+          description: Parameter to be used in order to avoid intercalation with begin
+            and end date
+        modificationFromStartDate:
+          type: string
+          description: Filter to include modifications starting from a specific date
+          format: date
+          example: 2000-12-30
+        modificationToEndDate:
+          type: string
+          description: Filter to include modifications ending at a specific date
+          format: date
+          example: 2000-12-31
+        isCanceled:
+          type: boolean
+          description: "Filter to include cancelled periods. By default, all are returned"
+          example: true
+        isLocked:
+          type: boolean
+          description: Filter to include periods where declaration is made by the
+            NSSO and not modifiable
+          example: true
+        isCanceledNsso:
+          type: boolean
+          description: Filter to include periods cancelled by NSSO
+          example: true
+        isLate:
+          type: boolean
+          description: Filter to include late periods
+          example: true
+        isAllowedFlexiJob:
+          type: boolean
+          description: Filter to include validated flexi job periods
+          example: true
+      description: Block containing all the parameters which can be used to search
+        fo a period
+      example:
+        activeFromDate: 2000-12-31T00:00:00.000+00:00
+        activeToDate: 2000-12-31T00:00:00.000+00:00
+        isCanceled: true
+        modificationFromStartDate: 2000-12-30T00:00:00.000+00:00
+        isAllowedFlexiJob: true
+        inOrOutOnly: true
+        features:
+          subEntityNumber: "1234567891"
+          excludedWorkerTypes:
+          - STU
+          - STU
+          jointCommissionNumbers:
+          - "124"
+          - "124"
+          excludedJointCommissionNumbers:
+          - "124"
+          - "124"
+          userEnterpriseSearch:
+            jointCommissionNumber: "124"
+            enterpriseNumber: enterpriseNumber
+            name: name
+          workerTypes:
+          - STU
+          - STU
+        isCanceledNsso: true
+        isLate: true
+        modificationToEndDate: 2000-12-31T00:00:00.000+00:00
+        isLocked: true
+        employer:
+          employerId: 480497095
+          enterpriseNumber: enterpriseNumber
+          excludedSectorIndicators:
+          - publicPla
+          - publicPla
+          includedSectorIndicators:
+          - publicPla
+          - publicPla
+        worker:
+          ssin: ssin
+          familyName: Doe
+          givenName: John
+    QuotaFeatures:
+      type: object
+      properties:
+        quotaType:
+          type: string
+          description: Quota type
+          example: article17
+          enum:
+          - a17_pubtv
+          - a17_year_sport
+          - a17_quarter_sport
+          - a17_student_sport
+          - a17_year_other
+          - a17_quarter_other
+          - a17_student_other
+          - article17
+          - horecaWorker
+          - horecaEmployer
+          - student
+          x-glossary: "01018"
+          x-ignore-rules:
+            cod-design: Ignore warning for lowerCamelCase format
+        exceedingQuotaHours:
+          maximum: 999
+          minimum: 0
+          type: integer
+          description: Number of hours exceeded
+          format: int32
+          example: 160
+          x-glossary: "01134"
+        exceedingQuotaDays:
+          maximum: 999
+          minimum: 0
+          type: integer
+          description: Number of days exceeded
+          format: int32
+          example: 111
+          x-glossary: "01019"
+      description: Details of quota characteristics
+      example:
+        quotaType: article17
+        exceedingQuotaDays: 111
+        exceedingQuotaHours: 160
+    References:
+      type: object
+      properties:
+        declaration:
+          maxLength: 20
+          minLength: 0
+          type: string
+          description: 'Declaration Reference '
+        employer:
+          maxLength: 20
+          minLength: 0
+          type: string
+          description: To specify an employer reference
+        worker:
+          maxLength: 20
+          minLength: 0
+          type: string
+          description: To specify a worker reference
+      description: "Optional block to provide various declaration references, filled\
+        \ in by the person responsible for creating the declaration.Useful for referencing\
+        \ declarations internally."
+      example:
+        employer: employer
+        worker: worker
+        declaration: declaration
+    Relation:
+      type: object
+      properties:
+        employer:
+          $ref: '#/components/schemas/Employer'
+        worker:
+          $ref: '#/components/schemas/Worker'
+        startDate:
+          type: string
+          description: Start date of the Dimona period
+          format: date
+          example: 2000-12-30
+          x-glossary: "00910"
+        endDate:
+          type: string
+          description: End date of the Dimona period
+          format: date
+          example: 2000-12-31
+          x-glossary: "00911"
+        numberOfPeriods:
+          type: integer
+          description: Number of periods between the worker and the employer
+          format: int32
+        numberOfPeriodsCanceled:
+          type: integer
+          description: Number of periods canceled between the worker and the employer
+          format: int32
+        numberOfFeatures:
+          type: integer
+          description: Number of Dimona features between the worker and the employer
+          format: int32
+        numberOfPeriodsTemporaryWorker:
+          type: integer
+          description: Number of periods as a temporary worker between the worker
+            and the employer
+          format: int32
+        jointCommissionNumbers:
+          type: array
+          items:
+            $ref: '#/components/schemas/JointCommissionNumber'
+        workerTypes:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkerType'
+        lastUpdateDate:
+          type: string
+          format: date
+          example: 2000-12-31
+    RelationSearchRequest:
+      type: object
+      properties:
+        employer:
+          $ref: '#/components/schemas/EmployerSearch'
+        worker:
+          $ref: '#/components/schemas/WorkerSearch'
+        activeFromDate:
+          type: string
+          description: Search for active periods starting from this date
+          format: date
+          example: 2000-12-31
+        activeToDate:
+          type: string
+          description: Search for active periods up to this date
+          format: date
+          example: 2000-12-31
+      description: Block containing the different search parameters available for
+        relation search. The employer or/and the worker block have to be provided
+      example:
+        activeFromDate: 2000-12-31T00:00:00.000+00:00
+        activeToDate: 2000-12-31T00:00:00.000+00:00
+        employer:
+          employerId: 480497095
+          enterpriseNumber: enterpriseNumber
+          excludedSectorIndicators:
+          - publicPla
+          - publicPla
+          includedSectorIndicators:
+          - publicPla
+          - publicPla
+        worker:
+          ssin: ssin
+          familyName: Doe
+          givenName: John
+    SmallStatutesInformation:
+      required:
+      - employmentNature
+      - workerStatus
+      type: object
+      properties:
+        employmentNature:
+          type: string
+          description: 'The nature of the work '
+          example: worker
+          enum:
+          - employee
+          - worker
+          x-glossary: "01231"
+        activityWithRisk:
+          maximum: 999.0
+          minimum: 1.0
+          type: integer
+          description: Activity versus risk. See Annex 6 - Activity versus risk List
+          format: int32
+          example: 401
+          x-glossary: "00041"
+        workerStatus:
+          pattern: "^[F][1,2]$"
+          type: string
+          description: Code that specifies the risk coverage regime and compensation
+            of the worker. This code can be F1 or F2. See Annex 21 - Worker status
+          example: F1
+          x-glossary: "00053"
+      description: Block for the data necessary for the calculation of risk premiums
+        for small status (internship and professional training).
+      example:
+        employmentNature: worker
+        activityWithRisk: 401
+        workerStatus: F1
+      x-glossary: "90594"
+    StudentPlaceOfWork:
+      required:
+      - address
+      - name
+      type: object
+      properties:
+        name:
+          type: string
+          description: Name of the company or agency of the student's workplace
+          x-glossary: "00776"
+        address:
+          $ref: '#/components/schemas/Address'
+      description: Block for declaring information about the workplace of a student.
+        Mandatory if it is not the company's head office
+      example:
+        address:
+          country: 231
+          street: street
+          houseNumber: houseNumber
+          municipality:
+            code: 64246
+            name: name
+          boxNumber: boxNumber
+          postCode: postCode
+        name: name
+      x-glossary: "90376"
+    UserEnterprise:
+      type: object
+      properties:
+        jointCommissionNumber:
+          maxLength: 3
+          minLength: 0
+          type: string
+          description: "Joint commission number. Watch the administration instructions\
+            \ at: https://www.socialsecurity.be/employer/instructions/dmfa/fr/latest/instructions/obligations/obligations_nsso/dimona/principaldata.html#h22"
+          example: "124"
+          x-glossary: "00046"
+        name:
+          type: string
+          description: The name of the company where an interim works
+          x-glossary: "00153"
+        enterpriseNumber:
+          pattern: "^[0|1]?\\d{9}$"
+          type: string
+          description: Identifier issued by CBE for a registered organization
+        employerId:
+          maximum: 5999999999
+          minimum: 197
+          type: integer
+          description: "Definitive or provisional NSSO number, assigned to each registered\
+            \ employer or local or provincial administration."
+          format: int64
+        address:
+          $ref: '#/components/schemas/Address'
+      description: Block for identification data of the employing company where the
+        person concerned is employed as a temporary worker
+      example:
+        employerId: 480497095
+        address:
+          country: 231
+          street: street
+          houseNumber: houseNumber
+          municipality:
+            code: 64246
+            name: name
+          boxNumber: boxNumber
+          postCode: postCode
+        jointCommissionNumber: "124"
+        enterpriseNumber: enterpriseNumber
+        name: name
+    UserEnterpriseSearch:
+      type: object
+      properties:
+        jointCommissionNumber:
+          maxLength: 3
+          minLength: 0
+          type: string
+          description: "Joint commission number. Watch the administration instructions\
+            \ at: https://www.socialsecurity.be/employer/instructions/dmfa/fr/latest/instructions/obligations/obligations_nsso/dimona/principaldata.html#h22"
+          example: "124"
+          x-glossary: "00046"
+        name:
+          type: string
+          description: The name of the company where an interim works
+          x-glossary: "00153"
+        enterpriseNumber:
+          pattern: "^[0|1]?\\d{9}$"
+          type: string
+          description: Identifier issued by CBE for a registered organization
+      description: Block for identification data of the employing company where the
+        person concerned is employed as a temporary worker
+      example:
+        jointCommissionNumber: "124"
+        enterpriseNumber: enterpriseNumber
+        name: name
+    Worker:
+      type: object
+      properties:
+        ssin:
+          pattern: "^\\d{11}$"
+          type: string
+          description: Social Security Identification Number issued by the National
+            Register or CBSS
+        familyName:
+          maxLength: 128
+          minLength: 0
+          type: string
+          description: The last name of the worker
+          example: Doe
+          x-glossary: "00025"
+        givenName:
+          maxLength: 48
+          minLength: 0
+          type: string
+          description: The first name of the worker
+          example: John
+          x-glossary: "00026"
+        givenNames:
+          type: string
+          description: The worker first name and any other given names
+        birthDate:
+          pattern: "^[0-9]{4}-[0-1][0-9]-[0-3][0-9]$"
+          type: string
+          description: The birthday of the worker
+          example: 2000-12-31
+          x-glossary: "00028"
+        nationality:
+          maximum: 999
+          minimum: 100
+          type: integer
+          description: NIS code representing a country as defined by statbel.fgov.be
+        gender:
+          $ref: '#/components/schemas/GenderCode'
+      description: Block for worker data
+      example:
+        ssin: ssin
+        nationality: 641
+        gender: null
+        familyName: Doe
+        givenName: John
+        givenNames: givenNames
+        birthDate: 2000-12-31
+    WorkerDeclaration:
+      type: object
+      properties:
+        ssin:
+          pattern: "^\\d{11}$"
+          type: string
+          description: Social Security Identification Number issued by the National
+            Register or CBSS
+        familyName:
+          maxLength: 128
+          minLength: 0
+          type: string
+          description: The last name of the worker
+          example: Doe
+          x-glossary: "00025"
+        givenName:
+          maxLength: 48
+          minLength: 0
+          type: string
+          description: The first name of the worker
+          example: John
+          x-glossary: "00026"
+        givenNames:
+          type: string
+          description: The worker first name and any other given names
+        initial:
+          maxLength: 1
+          minLength: 0
+          type: string
+          description: The initials of the worker
+          example: G
+          x-glossary: "00027"
+        birthDate:
+          pattern: "^[0-9]{4}-[0-1][0-9]-[0-3][0-9]$"
+          type: string
+          description: The birthday of the worker
+          example: 2000-12-31
+          x-glossary: "00028"
+        placeOfBirth:
+          maxLength: 40
+          minLength: 0
+          type: string
+          description: The place (municipality) of birth of the worker
+          example: UCCLE
+          x-glossary: "00168"
+        countryOfBirth:
+          maximum: 999
+          minimum: 100
+          type: integer
+          description: NIS code representing a country as defined by statbel.fgov.be
+        nationality:
+          maximum: 999
+          minimum: 100
+          type: integer
+          description: NIS code representing a country as defined by statbel.fgov.be
+        gender:
+          $ref: '#/components/schemas/GenderCode'
+        address:
+          $ref: '#/components/schemas/Address'
+      description: "Block for declaring worker identification data. Required for a\
+        \ Dimona IN. To be able to declare a worker, you must complete either the\
+        \ SSIN or the familyName,    the givenName, the birthDate, the placeOfBirth,\
+        \ the countryOfBirth, the nationality, the gender and the address.    When\
+        \ retrieving a declaration, following data will be displayed: familyName,\
+        \ givenName, birthDate, nationality and gender. "
+    WorkerSearch:
+      type: object
+      properties:
+        ssin:
+          pattern: "^\\d{11}$"
+          type: string
+          description: Social Security Identification Number issued by the National
+            Register or CBSS
+        familyName:
+          type: string
+          description: The last name of the worker
+          example: Doe
+          x-glossary: "00025"
+        givenName:
+          type: string
+          description: The first name of the worker
+          example: John
+          x-glossary: "00026"
+      description: Block for worker search
+      example:
+        ssin: ssin
+        familyName: Doe
+        givenName: John
+    WorkerType:
+      maxLength: 3
+      minLength: 0
+      type: string
+      description: "The worker type. Watch the administration instructions at: https://www.socialsecurity.be/employer/instructions/dmfa/fr/latest/instructions/obligations/obligations_nsso/dimona/principaldata.html#h22"
+      example: STU
+      x-glossary: "00655"
+    HealthStatus:
+      required:
+      - status
+      type: object
+      properties:
+        status:
+          type: string
+          description: "Level indicating the health status of the service: UP (functioning\
+            \ as expected), DOWN (suffering unexpected failures), DEGRADED (partly\
+            \ unavailable but service can be continued with reduced functionality),\
+            \ or a custom status value"
+      description: Response message for the API health
+      example:
+        status: status
+    Problem:
+      type: object
+      properties:
+        type:
+          type: string
+          description: An absolute URI that identifies the problem type
+          format: uri
+          default: about:blank
+        href:
+          type: string
+          description: "An absolute URI that, when dereferenced, provides human-readable\
+            \ documentation for the problem type (e.g. using HTML)."
+          format: uri
+        title:
+          type: string
+          description: A short summary of the problem type. Written in English and
+            readable for engineers (usually not suited for non technical stakeholders
+            and not localized).
+          example: Service Unavailable
+        status:
+          maximum: 600
+          exclusiveMaximum: true
+          minimum: 400
+          type: integer
+          description: The HTTP status code generated by the origin server for this
+            occurrence of the problem.
+          format: int32
+          example: 503
+        detail:
+          type: string
+          description: A human-readable explanation specific to this occurrence of
+            the problem
+        instance:
+          type: string
+          description: An absolute URI that identifies the specific occurrence of
+            the problem. It may or may not yield further information if dereferenced.
+          format: uri
+      description: A Problem Details object (RFC 7807)
+      example:
+        type: urn:problem-type:belgif:payloadTooLarge
+        href: https://www.belgif.be/specification/rest/api-guide/problems/payloadTooLarge.html
+        title: Payload Too Large
+        status: 413
+        detail: Request message must not be larger than 10 MB
+        instance: urn:uuid:123e4567-e89b-12d3-a456-426614174000
+        limit: 10485760
+    InputValidationProblem:
+      type: object
+      properties:
+        issues:
+          type: array
+          items:
+            $ref: '#/components/schemas/InputValidationIssue'
+      example:
+        type: urn:problem-type:belgif:badRequest
+        href: https://www.belgif.be/specification/rest/api-guide/problems/badRequest.html
+        title: Bad Request
+        status: 400
+        detail: The input message is incorrect
+        instance: urn:uuid:123456-1234-1235-4567489798
+        issues:
+        - type: urn:problem-type:belgif:input-validation:schemaViolation
+          title: Input isn't valid with respect to schema
+          detail: enterpriseNumber abc should be numeric
+          in: path
+          name: enterpriseNumber
+          value: abc
+        - type: urn:problem-type:cbss:input-validation:replacedSsin
+          href: https://api.ksz-bcss.fgov.be/problems/replacedSsin
+          title: SSIN has been replaced. Use new ssin.
+          detail: SSIN 12345678901 has been replaced by 23456789012
+          in: body
+          name: "parent[0].ssin"
+          value: "12345678901"
+          replacedBy: "23456789012"
+        - type: urn:problem-type:cbss:input-validation:invalidPeriod
+          title: period is invalid
+          detail: endDate should be after startDate
+          in: body
+          name: period
+          value:
+            startDate: 2020-12-31
+            endDate: 2020-01-01
+        - type: urn:problem-type:cbss:input-validation:invalidSsin
+          title: There is no person with the given SSIN
+          in: path
+          name: ssin
+          value: "12345678911"
+      allOf:
+      - $ref: '#/components/schemas/Problem'
+    InputValidationIssue:
+      type: object
+      properties:
+        in:
+          type: string
+          enum:
+          - body
+          - header
+          - path
+          - query
+        name:
+          type: string
+        value: {}
+      allOf:
+      - $ref: '#/components/schemas/Problem'
+    HttpLink:
+      type: object
+      properties:
+        href:
+          type: string
+          description: Any absolute URI that is using http or https protocol
+          format: uri
+          readOnly: true
+      description: A base type of objects representing links to resources.
+    CountryNisCode:
+      maximum: 999
+      minimum: 100
+      type: integer
+      description: NIS code representing a country as defined by statbel.fgov.be
+    LocalizedString:
+      type: object
+      properties:
+        nl:
+          type: string
+        fr:
+          type: string
+        de:
+          type: string
+      description: A description specified in multiple languages
+      example:
+        de: de
+        fr: fr
+        nl: nl
+    EmployerId:
+      maximum: 5999999999
+      minimum: 197
+      type: integer
+      description: "Definitive or provisional NSSO number, assigned to each registered\
+        \ employer or local or provincial administration."
+      format: int64
+    EnterpriseNumber:
+      pattern: "^[0|1]?\\d{9}$"
+      type: string
+      description: Identifier issued by CBE for a registered organization
+    SelfLink:
+      type: object
+      properties:
+        self:
+          type: string
+          description: Any absolute URI that is using http or https protocol
+          format: uri
+          readOnly: true
+      description: A base type representing a link to the resource's own location
+        within its representation
+    MunicipalityCode:
+      maximum: 99999
+      minimum: 10000
+      type: integer
+      description: Numeric code to identify a Belgian municipality
+    Ssin:
+      pattern: "^\\d{11}$"
+      type: string
+      description: Social Security Identification Number issued by the National Register
+        or CBSS
+    GenderCode:
+      type: integer
+      description: "Gender of a person, following the ISO 5218 standard: 0 = Unknown,\
+        \ 1 = male, 2 = female"
+      enum:
+      - 0
+      - 1
+      - 2
+    searchDeclarations_200_response_allOf_items_inner:
+      allOf:
+      - $ref: '#/components/schemas/HttpLink'
+      - $ref: '#/components/schemas/DeclarationResponse'
+    searchDeclarations_200_response:
+      allOf:
+      - $ref: '#/components/schemas/ListResponse'
+      - required:
+        - items
+        type: object
+        properties:
+          items:
+            type: array
+            items:
+              $ref: '#/components/schemas/searchDeclarations_200_response_allOf_items_inner'
+    searchPeriods_200_response_allOf_items_inner:
+      allOf:
+      - $ref: '#/components/schemas/HttpLink'
+      - $ref: '#/components/schemas/Period'
+    searchPeriods_200_response:
+      allOf:
+      - $ref: '#/components/schemas/ListResponse'
+      - required:
+        - items
+        type: object
+        properties:
+          items:
+            type: array
+            items:
+              $ref: '#/components/schemas/searchPeriods_200_response_allOf_items_inner'
+    searchRelations_200_response_allOf_items_inner:
+      allOf:
+      - $ref: '#/components/schemas/HttpLink'
+      - $ref: '#/components/schemas/Relation'
+    searchRelations_200_response:
+      allOf:
+      - $ref: '#/components/schemas/ListResponse'
+      - required:
+        - items
+        type: object
+        properties:
+          items:
+            type: array
+            items:
+              $ref: '#/components/schemas/searchRelations_200_response_allOf_items_inner'
+    searchDailyRegistrations_200_response:
+      allOf:
+      - $ref: '#/components/schemas/ListResponse'
+      - required:
+        - items
+        type: object
+        properties:
+          items:
+            type: array
+            items:
+              $ref: '#/components/schemas/DailyRegistration'
+    DeclarationStatus_period:
+      description: Identification of the Dimona period
+      allOf:
+      - $ref: '#/components/schemas/HttpLink'
+      - type: object
+        properties:
+          id:
+            minimum: 1
+            type: integer
+            description: Identification number of the Dimona period
+            format: int64
+            example: 123456789123
+            x-glossary: "00913"
+    DeclarationStatus_dailyRegistration:
+      description: Identification of the Daily Registration
+      allOf:
+      - $ref: '#/components/schemas/HttpLink'
+      - type: object
+        properties:
+          id:
+            minimum: 1
+            type: integer
+            description: Unique identification number of the Daily Registration Declaration
+            format: int64
+            example: 234567891234
+            x-glossary: "01085"
+  responses:
+    PeriodList:
+      description: List of Dimona periods and their details
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/searchPeriods_200_response'
+    RelationList:
+      description: List of worker-employer relations and their details
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/searchRelations_200_response'
+    DeclarationList:
+      description: List of Dimona declarations and their details
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/searchDeclarations_200_response'
+    DailyRegistrationList:
+      description: List of daily registrations and their details
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/searchDailyRegistrations_200_response'
+    ProblemResponse:
+      description: a problem
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    InputValidationProblemResponse:
+      description: A problem caused by invalid input
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/InputValidationProblem'
+  securitySchemes:
+    Oauth:
+      type: oauth2
+      flows:
+        implicit:
+          authorizationUrl: https://oauth-v5.socialsecurity.be/oauth2/authorize
+          scopes:
+            scope:dimona:declaration:consult: this scope allows an expediter or application
+              to consult Dimona and Personnel File
+            scope:dimona:declaration:ws-restdimona:dimonaenterpriseconsult: this scope
+              allows an enterprise to consult Dimona and Personnel File
+            scope:dimona:declaration:ws-restdimona:dimonarepresentativeconsult: this
+              scope allows a representative to consult Dimona and Personnel File
+            scope:dimona:declaration:ws-restdimona:dimonaprofessionalconsult: this
+              scope allows a professional to consult Dimona and Personnel File
+            scope:dimona:declaration:ws-restdimona:dimonaconsultcitizen: this scope
+              allows a citizen to consult Dimona and Personnel File
+            scope:dimona:declaration:declarant: this scope allows an expediter or
+              application to declare a Dimona
+            scope:dimona:declaration:ws-restdimona:dimonaenterprisedeclare: this scope
+              allows an enterprise to declare a Dimona
+            scope:dimona:declaration:ws-restdimona:dimonarepresentativedeclare: this
+              scope allows an enterprise to declare a Dimona
+            scope:dimona:declaration:ws-restdimona:dimonaprofessionaldeclare: this
+              scope allows a professional to declare a Dimona
+        clientCredentials:
+          tokenUrl: https://services.socialsecurity.be/REST/oauth/v5/token
+          scopes:
+            scope:dimona:declaration:consult: this scope allows an expediter or application
+              to consult Dimona and Personnel File
+            scope:dimona:declaration:ws-restdimona:dimonaenterpriseconsult: this scope
+              allows an enterprise to consult Dimona and Personnel File
+            scope:dimona:declaration:ws-restdimona:dimonarepresentativeconsult: this
+              scope allows a representative to consult Dimona and Personnel File
+            scope:dimona:declaration:ws-restdimona:dimonaprofessionalconsult: this
+              scope allows a professional to consult Dimona and Personnel File
+            scope:dimona:declaration:ws-restdimona:dimonaconsultcitizen: this scope
+              allows a citizen to consult Dimona and Personnel File
+            scope:dimona:declaration:declarant: this scope allows an expediter or
+              application to declare a Dimona
+            scope:dimona:declaration:ws-restdimona:dimonaenterprisedeclare: this scope
+              allows an enterprise to declare a Dimona
+            scope:dimona:declaration:ws-restdimona:dimonarepresentativedeclare: this
+              scope allows an enterprise to declare a Dimona
+            scope:dimona:declaration:ws-restdimona:dimonaprofessionaldeclare: this
+              scope allows a professional to declare a Dimona
+        authorizationCode:
+          authorizationUrl: https://oauth-v5.socialsecurity.be/oauth2/authorize
+          tokenUrl: https://services.socialsecurity.be/REST/oauth/v5/token
+          scopes:
+            scope:dimona:declaration:consult: this scope allows an expediter or application
+              to consult Dimona and Personnel File
+            scope:dimona:declaration:ws-restdimona:dimonaenterpriseconsult: this scope
+              allows an enterprise to consult Dimona and Personnel File
+            scope:dimona:declaration:ws-restdimona:dimonarepresentativeconsult: this
+              scope allows a representative to consult Dimona and Personnel File
+            scope:dimona:declaration:ws-restdimona:dimonaprofessionalconsult: this
+              scope allows a professional to consult Dimona and Personnel File
+            scope:dimona:declaration:ws-restdimona:dimonaconsultcitizen: this scope
+              allows a citizen to consult Dimona and Personnel File
+            scope:dimona:declaration:declarant: this scope allows an expediter or
+              application to declare a Dimona
+            scope:dimona:declaration:ws-restdimona:dimonaenterprisedeclare: this scope
+              allows an enterprise to declare a Dimona
+            scope:dimona:declaration:ws-restdimona:dimonarepresentativedeclare: this
+              scope allows an enterprise to declare a Dimona
+            scope:dimona:declaration:ws-restdimona:dimonaprofessionaldeclare: this
+              scope allows a professional to declare a Dimona
