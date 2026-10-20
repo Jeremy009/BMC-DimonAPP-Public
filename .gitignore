@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Virtual environment and tool caches
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Secrets and local environment (R2.7)
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+
+# Streamlit secrets, generated at start-up from environment variables (R4.10)
+.streamlit/secrets.toml
+
+# Uploaded documents of the local storage (fake data only)
+local_storage/
+
+# macOS
+.DS_Store

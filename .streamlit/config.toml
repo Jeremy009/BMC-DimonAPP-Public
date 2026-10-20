@@ -1,0 +1,13 @@
+# Streamlit configuration shared by every environment. Secrets never go in this file.
+
+[theme]
+base = 'light'
+
+[client]
+toolbarMode = 'minimal'
+# An unexpected error shows a general message only: its details can hold personal data and
+# go to the server log alone (R3.8).
+showErrorDetails = 'none'
+
+[browser]
+gatherUsageStats = false

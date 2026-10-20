@@ -1,0 +1,15 @@
+# Local development only: a throwaway PostgreSQL with fake data (FDS section 4).
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: dimonapp
+      POSTGRES_PASSWORD: dimonapp
+      POSTGRES_DB: dimonapp
+    ports:
+      - '5432:5432'
+    volumes:
+      - dimonapp-db:/var/lib/postgresql/data
+
+volumes:
+  dimonapp-db:
