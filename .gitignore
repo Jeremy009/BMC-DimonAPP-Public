@@ -25,3 +25,6 @@ local_storage/
 
 # macOS
 .DS_Store
+
+# Local settings and working notes of Claude Code, never part of the repository or a build
+.claude/
