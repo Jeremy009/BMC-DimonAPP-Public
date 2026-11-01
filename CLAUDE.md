@@ -16,6 +16,7 @@ Internal web app for Brussels Monkeys Climbing ASBL (BMC). Workers declare climb
 - PostgreSQL (Cloud SQL in GCP, a Docker container locally).
 - Google sign-in via Streamlit's built-in OIDC (`st.login`, `st.user`, `st.logout`, needs Authlib). Local accounts: username + password hashed with **Argon2** (argon2-cffi).
 - Docker, one image for the three environments: TEST (no Dimona call), ACC (RSZ test service), PROD (live RSZ service). GCP: Cloud Run (max 1 instance), Cloud SQL, Cloud Storage, Secret Manager, region europe-west1.
+- MCP server: the standalone **fastmcp** package (pinned), served by a second Cloud Run service per environment from the same image, read-only, with its own database role (FDS section 15).
 - Tests: **pytest**; database tests use **testcontainers** PostgreSQL; the Dimona API is always mocked in tests.
 
 ## Commands
@@ -31,7 +32,7 @@ Every feature, fix or requirement change follows the same loop. Never commit dir
 
 1. **Branch.** Start from an up-to-date `main` on a new branch named `claude/<feature>` (for example `claude/r8-dimona-client`). One branch per unit of work; keep it small enough to review.
 2. **Build.** Implement only what the FDS asks for in that unit, following the Python style below.
-3. **Version.** Raise the version in `src/dimonapp/__init__.py` (the only place, R18.8) once for every pull request, before opening it: the next release candidate number until the first release (`3.0.0rc1`, `3.0.0rc2`, ...; the betas `3.0.0b6` to `3.0.0b32` came before), semantic versioning after that. Review commits on the same pull request keep its version.
+3. **Version.** Raise the version in `src/dimonapp/__init__.py` (the only place, R18.8) once for every pull request, before opening it, FDS-only pull requests included. 3.0.0 is the first release (the betas `3.0.0b6` to `3.0.0b32` and the release candidates `3.0.0rc1` and `3.0.0rc2` came before it). The MCP server was built as the 3.1.0 alphas (`3.1.0a1` to `3.1.0a8`) and released as `3.1.0`. Review commits on the same pull request keep its version.
 4. **Check.** `make lint` leaves no changes and no warnings, and `make test` passes. Fix failures; do not skip, weaken or delete tests to get green.
 5. **Pull request.** Push the branch and open a PR against `main`. The description lists the version, the requirement IDs covered, what was built, how it was tested, and anything left open or deviating from the FDS.
 6. **Stop and ask for review.** Never merge a PR, never push to `main`, never force-push a branch under review. The user reviews and merges. Address review comments with new commits on the same branch.
@@ -40,7 +41,7 @@ Start the next unit only after the previous PR is merged, unless the user says o
 
 ## Rules that must never be broken
 
-1. **French interface.** Every label, message, error, month name and number format is in French (1 234,50 €, 2,5 h, dates DD/MM/YYYY). The FDS (section 3.4) has the English-to-French label table. Code, comments, tests and commit messages are in English.
+1. **French interface.** Every label, message, error, month name and number format is in French (1 234,50 €, 2,5 h, dates DD/MM/YYYY). The FDS (section 3.4) has the English-to-French label table. Code, comments, tests and commit messages are in English. The MCP server is the exception: its output is read by an AI model and is in English, apart from the French activity labels (FDS section 15.5).
 2. **No secrets in code, image or repo.** Everything comes from environment variables: `.env` locally (git-ignored, template in `.env.example`), Secret Manager in GCP. Keys and certificates live in a folder outside the repository, never in it, not even git-ignored. `.streamlit/secrets.toml` is generated at start-up from environment variables and is never committed.
 3. **Activities are immutable.** Once declared, only the cancellation marker can change, plus the Dimona fields when an admin resolves a pending declaration. The rate, model, worker type and amount are copied onto the activity at declaration time.
 4. **Never assume a Dimona outcome.** What is shown and stored is always based on the real API response or its absence (2-minute timeout leads to "pending").
