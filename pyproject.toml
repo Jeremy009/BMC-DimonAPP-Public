@@ -8,6 +8,7 @@ dependencies = [
     'alembic>=1.14',
     "argon2-cffi>=23.1",
     "cryptography>=50.0.2",
+    "fastmcp==4.1.4",
     "fpdf2>=2.8.9",
     "google-cloud-storage>=3.17.0",
     "lxml>=6.1.3",
@@ -17,14 +18,17 @@ dependencies = [
     "pyjwt>=2.15.1",
     "requests>=2.34.2",
     'sqlalchemy>=2.0',
+    "starlette>=1.0",
     "streamlit[auth]>=1.50",
     'tomli-w>=1.1',
+    "uvicorn>=0.35",
 ]
 
 [dependency-groups]
 dev = [
     "pypdf>=6.20.0",
     'pytest>=8',
+    "pytest-asyncio>=1.0",
     'ruff>=0.9',
     'testcontainers[postgres]>=4.9',
 ]
@@ -45,6 +49,8 @@ testpaths = ['tests']
 # The integration tests call real services: they only run when their folder is named on the
 # command line (`make test-rsz`), never with `make test`.
 norecursedirs = ['integration']
+# The MCP client is async only: async tests run on their own event loop (pytest-asyncio).
+asyncio_mode = 'auto'
 
 [tool.ruff]
 line-length = 100
