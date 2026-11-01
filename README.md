@@ -2,7 +2,7 @@
 
 # DimonAPP
 
-DimonAPP is the web application Brussels Monkeys Climbing ASBL (BMC), a climbing association in Brussels, uses to run the people who work at its gym. Workers declare what they will do: open the gym, give a course, set or clean a route. The application checks that they are allowed to do it, declares them to Belgian social security when the law requires it, and turns everything into the monthly payments and the yearly tax fiches. Admins can also ask Claude questions about the activities without any personal data reaching the model.
+DimonAPP is the web application Brussels Monkeys Climbing ASBL (BMC), a climbing association in Brussels, uses to run the people who work at its gym. Workers declare what they will do: open the gym, give a course, set or clean a route. The application checks that they are allowed to do it, declares them to Belgian social security when the law requires it, and turns everything into the monthly payments and the yearly tax fiches. Admins can also ask Claude questions about the activities through an [MCP server](#asking-claude-the-mcp-server), without any personal data reaching the model.
 
 It replaces BMC's timesheet and succeeds an earlier in-house tool, and runs in production as version 3.1.0. The interface is in French.
 
