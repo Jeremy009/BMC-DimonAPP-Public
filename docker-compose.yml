@@ -6,8 +6,9 @@ services:
       POSTGRES_USER: dimonapp
       POSTGRES_PASSWORD: dimonapp
       POSTGRES_DB: dimonapp
+    # Published on the loopback address only, so other machines on the network cannot reach it.
     ports:
-      - '5432:5432'
+      - '127.0.0.1:5432:5432'
     volumes:
       - dimonapp-db:/var/lib/postgresql/data
 
