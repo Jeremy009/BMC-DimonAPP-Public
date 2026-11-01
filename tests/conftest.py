@@ -10,10 +10,23 @@ from testcontainers.community.postgres import PostgresContainer
 
 from dimonapp.database import create_database_engine, run_migrations
 
+# The database user of the MCP service in the tests, a member of the read-only role (R20.10).
+MCP_TEST_USER = 'mcp_test_user'
+MCP_TEST_PASSWORD = 'mcp_test_password'
+
 SETTING_NAMES = (
     'APP_ENV',
     'DATABASE_URL',
     'PORT',
+    'K_SERVICE',
+    'MCP_HOST',
+    'MCP_DATABASE_URL',
+    'MCP_DATABASE_IAM_LOGIN',
+    'MCP_BASE_URL',
+    'MCP_GOOGLE_CLIENT_ID',
+    'MCP_GOOGLE_CLIENT_SECRET',
+    'MCP_JWT_SIGNING_KEY',
+    'MCP_OAUTH_FOLDER',
     'STORAGE_BUCKET',
     'STORAGE_FOLDER',
     'FIRST_ADMIN_EMAIL',
@@ -107,3 +120,26 @@ def account_engine(migrated_engine: sa.Engine) -> Iterator[sa.Engine]:
             )
         )
         cleanup_session.commit()
+
+
+@pytest.fixture(scope='session')
+def mcp_database_url(postgres_url: str, migrated_engine: sa.Engine) -> str:
+    """Create a database user in the role of the MCP service and give its connection URL.
+
+    It signs in as the MCP service does in GCP: a user of its own, member of dimonapp_mcp.
+    """
+    create_user = (
+        f"CREATE ROLE {MCP_TEST_USER} LOGIN PASSWORD '{MCP_TEST_PASSWORD}' IN ROLE dimonapp_mcp"
+    )
+    with migrated_engine.begin() as connection:
+        connection.execute(sa.text(create_user))
+    url = sa.make_url(postgres_url).set(username=MCP_TEST_USER, password=MCP_TEST_PASSWORD)
+    return url.render_as_string(hide_password=False)
+
+
+@pytest.fixture(scope='session')
+def mcp_engine(mcp_database_url: str) -> Iterator[sa.Engine]:
+    """Give an engine that signs in as the database user of the MCP service."""
+    engine = create_database_engine(database_url=mcp_database_url)
+    yield engine
+    engine.dispose()

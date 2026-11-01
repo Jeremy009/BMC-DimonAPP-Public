@@ -1,4 +1,4 @@
-.PHONY: test test-rsz run lint db migrate seed docker-build
+.PHONY: test test-rsz run mcp mcp-user lint db migrate seed docker-build
 
 # Run the full test suite (Docker must be running for the database tests).
 test:
@@ -18,6 +18,20 @@ run:
 	uv run python -m dimonapp.secrets_file
 	uv run python -m dimonapp.page_locale
 	uv run streamlit run src/dimonapp/app.py
+
+# Start the MCP service locally at http://127.0.0.1:8081/public/mcp, as APP_ENV of .env, so an
+# MCP client (MCP Inspector, Claude Code, Claude Desktop) on this machine can try it (FDS 15.3).
+# With MCP_DATABASE_URL it also serves the data tools at /mcp: without sign-in in TEST, unless
+# the MCP_* sign-in values of .env.example are set.
+mcp:
+	MCP_HOST=127.0.0.1 PORT=8081 uv run python -m dimonapp.mcp_service
+
+# Create, once, the database user of the MCP service in the local database, after make migrate:
+# a member of the read-only role dimonapp_mcp (FDS 15.4), with the local password of
+# MCP_DATABASE_URL in .env.example.
+mcp-user:
+	docker compose exec -T db psql -U dimonapp -d dimonapp -v ON_ERROR_STOP=1 \
+		-c "CREATE ROLE dimonapp_mcp_local LOGIN PASSWORD 'dimonapp_mcp_local' IN ROLE dimonapp_mcp"
 
 # Format and lint the code with Ruff.
 lint:

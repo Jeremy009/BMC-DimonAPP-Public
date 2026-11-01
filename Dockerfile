@@ -30,8 +30,9 @@ RUN python -m dimonapp.web_app_manifest
 RUN python -m dimonapp.page_locale
 
 # Run as an unprivileged user that can write the generated Streamlit secrets file and the
-# local document storage (the default STORAGE_FOLDER; in GCP the files go to a bucket).
-RUN useradd --create-home dimonapp \
+# local document storage (the default STORAGE_FOLDER; in GCP the files go to a bucket). Its
+# fixed id 1000 owns the bucket that Cloud Run mounts for the MCP service (DEPLOYMENT.md, 7.4).
+RUN useradd --uid 1000 --create-home dimonapp \
     && mkdir local_storage \
     && chown dimonapp:dimonapp /app/.streamlit /app/local_storage
 USER dimonapp
