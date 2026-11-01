@@ -11,10 +11,10 @@ Timesheets, Dimona declarations and fiscal fiche 281.27
 | **Document** | **Value**                                                            |
 |--------------|----------------------------------------------------------------------|
 | Type         | Functional Design Specification (FDS)                                |
-| Version      | 4.10 (Android home screen icon) |
-| Date         | 17 October 2026                                                      |
+| Version      | 4.18 (production deployed) |
+| Date         | 1 November 2026                                                      |
 | Owner        | BMC board                                                            |
-| Status       | Built; acceptance deployed, production to follow                     |
+| Status       | Version 3.1.0 released, with the MCP server; acceptance and production deployed |
 
 **Version history**
 
@@ -31,6 +31,14 @@ Timesheets, Dimona declarations and fiscal fiche 281.27
 | 4.8 | 17 October 2026 | Release candidates: the application is complete, so the version moves from the betas (3.0.0bN) to release candidates (3.0.0rc1, 3.0.0rc2 and so on), still raised with every pull request until the first release 3.0.0. Requirement changed: R18.8. |
 | 4.9 | 17 October 2026 | Appendix B, the screenshots of every screen, is removed: the application itself now shows the screens, and the text of this document describes them. |
 | 4.10 | 17 October 2026 | Android home screen icon: the application serves a web app manifest, so a phone with Android shows the DimonAPP icon and name on its home screen and opens the application without the browser bar, as an iPhone does. Requirement added: R18.10. |
+| 4.11 | 31 October 2026 | Version 3.0.0 is the first release. A read-only MCP server lets an active admin ask an AI assistant aggregate questions about the activities (hours, days, anomalies, the month under review), and keeps personal data, identifiers and euros inside the database (section 15). The work goes to the 3.1.0 pre-releases. Requirements added: R20.1 to R20.21. Requirements changed: R1.8, R1.10, R1.12, R2.1, R2.4, R4.8, R18.1 and R18.8. Open item 9 added. |
+| 4.12 | 31 October 2026 | The Makefile gets make mcp, which starts the MCP service on the developer's machine for a local MCP client (section 3.5). No requirement changed. |
+| 4.13 | 31 October 2026 | The views and functions of the MCP server live in a database schema of their own, mcp, and the database user of the MCP service gets its rights as a member of a role without sign-in, dimonapp_mcp (section 15.4). The Makefile gets make mcp-user, which creates that user in the local database (section 3.5). No requirement changed. |
+| 4.14 | 31 October 2026 | The MCP service signs in to the database as the Cloud SQL IAM user of its service account, without any password (section 15.4); open item 9 closed. Its OAuth proxy keeps its encrypted state in a Cloud Storage bucket of its own, which Cloud Run mounts as a folder (section 15.3). No requirement changed. |
+| 4.15 | 31 October 2026 | Security hardening of the MCP server after an audit: without sign-in, `/mcp` is only served on the developer's machine, never in Cloud Run, and only to requests addressed to that machine (section 15.2); the sign-in state older than 30 days is deleted from its bucket (section 15.3); an unexpected error reaches the MCP client without its technical details (section 15.5). Requirement added: R20.22. Requirements changed: R20.7, R20.9 and R20.20. |
+| 4.16 | 31 October 2026 | The OAuth proxy of the MCP server sends a sign-in back only to the redirect address of Claude or of the admin's own machine (section 15.3). Requirement added: R20.23. |
+| 4.17 | 1 November 2026 | The board of BMC agreed to release the MCP server, as long as no personal data reaches the model (section 15.1). It is released as version 3.1.0 and runs in production as well as in acceptance (sections 3.2, 13 and 15.3). One GCP project holds both environments, so every service account may use only the Cloud SQL instance of its own environment (sections 3.2 and 15.3). Requirements changed: R18.8, R20.8 and R20.9. |
+| 4.18 | 1 November 2026 | Production is deployed: the application and the MCP server run in acceptance and production. The log names the Dimona service when a worker first opens the application, not at start-up (sections 3.2 and 3.4). No requirement changed. |
 
 ## 1. Purpose and scope
 
@@ -43,6 +51,8 @@ DimonAPP V3.0 is the simple internal web application Brussels Monkeys Climbing (
 3.  Year-end generation of the fiscal fiche 281.27 (verenigingswerk / article 17), both as PDF and as Belcotax-on-web XML.
 
 4.  Authorisation management: a worker may only perform an activity when a valid contract and a valid qualification covering it are on file.
+
+Next to the application, a read-only MCP server (section 15) lets an admin ask an AI assistant such as Claude aggregate questions about the activities, without any personal data, identifier or euro amount leaving the database.
 
 BMC already operates an in-house Python + Streamlit tool (DimonAPP V2, also called Dimona B2) with a working, certificate-based connection to the RSZ Dimona API. The new application reuses that proven integration rather than rebuilding it.
 
@@ -60,6 +70,8 @@ The application has two profiles, implemented as two fully separate account type
 | Stored in   | workers table                                                                                 | admins table                                                                  |
 
 - An admin is never stored as a worker and has no worker-side access.
+
+- The full tools of the MCP server (section 15) are for active admins only, signed in with Google. A worker account never gets them, a Google worker account included. The public part of the MCP server needs no sign-in and shows no data.
 
 - A person with both roles (for example the president) has two separate accounts and logs in with the one matching the task at hand.
 
@@ -89,9 +101,11 @@ The application has two profiles, implemented as two fully separate account type
 
 - **Packaging:** Docker, one image for all environments
 
-- **Cloud:** Google Cloud Platform (BMC already runs on Google Workspace), in one GCP project, dimonapp, that holds acceptance and production
+- **Cloud:** Google Cloud Platform (BMC already runs on Google Workspace), in one GCP project that holds acceptance and production
 
-- **Compute:** Cloud Run, publicly reachable over HTTPS, hence authentication is mandatory
+- **Compute:** Cloud Run, publicly reachable over HTTPS, hence authentication is mandatory (the one exception is the public endpoint of the MCP server, which holds no data, section 15)
+
+- **MCP server:** the standalone fastmcp package, served by a second Cloud Run service from the same image (section 15)
 
 - **Database:** Cloud SQL for PostgreSQL (see section 4)
 
@@ -107,7 +121,7 @@ Three environments, kept as identical as possible. They differ in one deliberate
 | Acceptance | ACC | In GCP | Real calls to the RSZ Dimona test (simulation) service |
 | Production | PROD | In GCP | Real calls to the live RSZ Dimona service |
 
-- Acceptance and production are each a Cloud Run service paired with its own Cloud SQL database and its own document bucket, in the same region, with the same schema and configuration shape.
+- Acceptance and production are each a Cloud Run service for the application paired with its own Cloud SQL database and its own document bucket, in the same region, with the same schema and configuration shape. Each also has a second Cloud Run service for the MCP server (section 15), from the same image and on the same database. One GCP project holds both environments, so the service account of each service may use only the Cloud SQL instance of its own environment: nothing of acceptance can connect to the database of production.
 
 - The test environment is not deployed to GCP. It is the application run locally (make run) against a throwaway PostgreSQL in Docker, with fake data only (section 4).
 
@@ -115,7 +129,7 @@ Three environments, kept as identical as possible. They differ in one deliberate
 
 - No data is copied between environments: production holds the real data, acceptance only fictitious workers that the RSZ test service knows.
 
-- The environment is named by one injected value (TEST, ACC or PROD). The code uses that name for two things only: the label in the sidebar and the Dimona service of the table above. The RSZ address is therefore not a separate setting, so an environment can never call the wrong service; the start-up log names the service in use. Everything else that differs is injected configuration: database connection, storage bucket and the Dimona identifiers and key.
+- The environment is named by one injected value (TEST, ACC or PROD). The code uses that name for three things only: the label in the sidebar, the Dimona service of the table above, and the start-up check of the MCP server, which refuses to run in acceptance or production without sign-in (section 15.2). The RSZ address is therefore not a separate setting, so an environment can never call the wrong service; the log names the service in use when a worker first opens the application. Everything else that differs is injected configuration: database connection, storage bucket and the Dimona identifiers and key.
 
 ### 3.3 Configuration and secrets
 
@@ -127,9 +141,9 @@ Three environments, kept as identical as possible. They differ in one deliberate
 
 - Values are trimmed when read, so a secret stored with a line break at its end still works.
 
-- The environment name and the database connection are required: without them the application stops at start-up instead of guessing. Acceptance and production also refuse to start without the RSZ identifiers and the Dimona key.
+- The environment name and the database connection are required: without them the application stops at start-up instead of guessing. The application in acceptance and production also refuses to start without the RSZ identifiers and the Dimona key; the MCP server never gets them (section 15.3).
 
-- In GCP each environment has its own service account, its own secrets and its own Google OAuth client. The Cloud Run service runs as that service account, which can read only the secrets and the document bucket of its own environment.
+- In GCP each environment has its own service account, its own secrets and its own Google OAuth client. The Cloud Run service runs as that service account, which can read only the secrets and the document bucket of its own environment. The MCP service of an environment has a service account, secrets and Google OAuth client of its own (section 15.3).
 
 - The Dimona certificate, API key and database password are never baked into the Docker image nor committed to the repository. This is a crucial requirement.
 
@@ -137,7 +151,7 @@ Three environments, kept as identical as possible. They differ in one deliberate
 
 The look and feel follows the current DimonAPP V2 so users recognise it. Every page, for workers and admins and including the login page, shares the same frame:
 
-- **Language:** the whole user interface is in French: every label, button, message, error, table header, month name and date. Numbers and amounts use French formatting (for example 1 234,50 €, 2,5 h; dates DD/MM/YYYY). Calendars (date pickers) are French in every browser, whatever its language: French month and day names, weeks starting on Monday. This document uses English names; the French labels are listed in the table below. One deliberate exception: the table of the Activities tab (section 7.8) is interactive, so the admin can sort, search, enlarge and export it; the menus of that table (sort, format, search, download, full screen) are Streamlit's own and only exist in English. Its headers and content stay French. Every other read-only table is a plain table without those menus.
+- **Language:** the whole user interface is in French: every label, button, message, error, table header, month name and date. Numbers and amounts use French formatting (for example 1 234,50 €, 2,5 h; dates DD/MM/YYYY). Calendars (date pickers) are French in every browser, whatever its language: French month and day names, weeks starting on Monday. This document uses English names; the French labels are listed in the table below. One deliberate exception: the table of the Activities tab (section 7.8) is interactive, so the admin can sort, search, enlarge and export it; the menus of that table (sort, format, search, download, full screen) are Streamlit's own and only exist in English. Its headers and content stay French. Every other read-only table is a plain table without those menus. A second exception is the MCP server (section 15.5): what it returns is read by an AI model, not shown as a page, so its names and texts are in English, its dates and numbers are plain machine formats, and only the activity types keep their French labels; the model answers the admin in French.
 
 - **Theme:** the default Streamlit light theme, as in DimonAPP V2.
 
@@ -186,9 +200,9 @@ Android does not read the apple-touch-icon: it takes the home screen icon, the n
 
 - **Footer:** a full-width footer at the bottom of every page reading "V\<x.y.z\> - © \<current year\> Brussels Monkeys Climbing", with a link to www.brusselsmonkeysclimbing.com below it.
 
-- **Dimona service:** the footer does not name the Dimona service. The service follows from the environment alone (section 3.2), the sidebar shows the environment, and the start-up log names the service in use.
+- **Dimona service:** the footer does not name the Dimona service. The service follows from the environment alone (section 3.2), the sidebar shows the environment, and the log names the service in use when a worker first opens the application.
 
-- **Versioning:** the application uses semantic versioning (MAJOR.MINOR.PATCH), with 3.0.0 as the first release. Until then the version is a pre-release of it, raised with every pull request, so the footer tells exactly which build is running: betas during the build (3.0.0b6, 3.0.0b7 and so on), then release candidates once the application is complete (3.0.0rc1, 3.0.0rc2 and so on). The version is defined in one place in the code and built into the Docker image, so the footer always shows the version that is actually deployed; the same image shows the same version in every environment.
+- **Versioning:** the application uses semantic versioning (MAJOR.MINOR.PATCH). The version is raised with every pull request, so the footer tells exactly which build is running. 3.0.0 is the first release (31 October 2026); before it came the betas of the build (3.0.0b6, 3.0.0b7 and so on) and the release candidates of the complete application (3.0.0rc1 and 3.0.0rc2). Work towards a next version is a series of pre-releases of it: the MCP server, a new capability, was built as the alphas of 3.1.0 (3.1.0a1 to 3.1.0a8) and released as 3.1.0 (1 November 2026). The version is defined in one place in the code and built into the Docker image, so the footer always shows the version that is actually deployed; the same image shows the same version in every environment.
 
 French interface labels for the terms used in this document:
 
@@ -238,7 +252,7 @@ French interface labels for the terms used in this document:
 
   - make run: starts the application locally (uv run streamlit run src/dimonapp/app.py), reading configuration from the local .env file. It first writes .streamlit/secrets.toml from the same .env file, so Google sign-in also works locally (section 3.6).
 
-The Makefile also has: make lint (Ruff formats and checks the code), make db (starts the local PostgreSQL), make migrate (applies the migrations), make seed (fills an empty local database with fake data; refused in production and on a database that already holds workers), make docker-build (builds the image) and make test-rsz (declares and cancels one activity at the RSZ test service; never part of make test).
+The Makefile also has: make lint (Ruff formats and checks the code), make db (starts the local PostgreSQL), make migrate (applies the migrations), make seed (fills an empty local database with fake data; refused in production and on a database that already holds workers), make docker-build (builds the image), make mcp (starts the MCP service on the developer's machine, section 15.3), make mcp-user (creates the database user of the MCP service in the local database, section 15.4) and make test-rsz (declares and cancels one activity at the RSZ test service; never part of make test).
 
 ### 3.6 Technical choices
 
@@ -251,13 +265,15 @@ These choices keep the implementation consistent and simple:
 | Google sign-in              | Streamlit's built-in OIDC login: st.login(), st.user and st.logout() with Google as provider (Streamlit's auth extra, which installs Authlib and httpx)               | Native to Streamlit, no custom OAuth code. After sign-in, the e-mail in st.user is matched against the admins table and then the workers table (auth_method = google); an unknown or inactive e-mail is refused with a French error message. |
 | Local accounts              | A username and password form in the app; passwords hashed with Argon2 (argon2-cffi)                                           | Argon2 is the current recommended password hash. The signed-in local user is kept in st.session_state (a browser refresh asks to sign in again, which is acceptable).                                                                        |
 | Streamlit secrets           | At start-up, a small script writes .streamlit/secrets.toml (the \[auth\] section) from environment variables                  | st.login reads its settings from secrets.toml, while the project rule is environment variables everywhere (section 3.3). The generated file is never committed or baked into the image.                                                      |
-| Cloud SQL connection        | Cloud Run's built-in Cloud SQL connection (Unix socket); TCP to a local PostgreSQL container in development                   | No extra connector library in the code; only the connection URL differs per environment.                                                                                                                                                     |
-| Cloud Run scaling           | Maximum one instance                                                                                                          | Ample for BMC, avoids concurrent migrations at start-up, and keeps Streamlit's websocket sessions on one instance.                                                                                                                           |
+| Cloud SQL connection        | Cloud Run's built-in Cloud SQL connection (Unix socket); TCP to a local PostgreSQL container in development                   | No extra connector library in the code; only the connection URL differs per environment. The MCP service uses the same connection with its own read-only database role (section 15.4).                                                     |
+| Cloud Run scaling           | Maximum one instance, for the application and for the MCP service                                                             | Ample for BMC, avoids concurrent migrations at start-up, and keeps Streamlit's websocket sessions on one instance. The MCP service scales to zero when nobody uses it.                                                                      |
 | Tests                       | pytest; database tests run against a throwaway PostgreSQL started by testcontainers; the Dimona API is always mocked in tests | make test works on any machine with Docker, without manual setup, and tests never call RSZ.                                                                                                                                                  |
 | Document storage | The google-cloud-storage library behind a small storage interface, with a local folder as the second implementation | The same code stores a document in the bucket in GCP and in a folder locally and in tests. |
 | Payment file and Belcotax file | XML written with lxml and checked against the official schema stored with the code | A wrong file is caught before it leaves the application. |
 | Fiche 281.27 PDF | fpdf2, with the DejaVu Sans font stored with the code | A small pure-Python library; the font prints every name, accents included. |
 | Dimona client | requests for the calls, PyJWT and cryptography to sign the authentication with the private key | The same way DimonAPP V2 talks to the RSZ. |
+| MCP server | The standalone fastmcp package (gofastmcp.com, FastMCP 4.x, exact version pinned), not the older FastMCP bundled in the official mcp SDK; Streamable HTTP in GCP, stdio or local HTTP on the developer's machine | Its 4.x line serves the current MCP specification, including the sessionless form that suits Cloud Run, derives the output schemas of the tools from Pydantic models, and brings the Google sign-in the full endpoint needs. |
+| MCP sign-in | FastMCP's GoogleProvider, an OAuth proxy in front of Google, with an OAuth client of its own; the e-mail is then checked against the active admins by a database function (section 15.4) | Google offers no dynamic client registration, which MCP clients such as Claude expect; the proxy bridges it. |
 
 ## 4. Data and database management
 
@@ -267,13 +283,13 @@ The application stores highly confidential personal data (national register numb
 
 - **Region:** europe-west1 (Belgium) for the database and its backups.
 
-- **Network:** the Cloud Run service connects through Cloud Run's built-in Cloud SQL connection (a Unix socket backed by the Cloud SQL Auth Proxy); the instance has no authorised networks, so the database is never reachable from the public internet. Locally, the application connects over TCP to a PostgreSQL container.
+- **Network:** the Cloud Run services (the application and the MCP server) connect through Cloud Run's built-in Cloud SQL connection (a Unix socket backed by the Cloud SQL Auth Proxy); the instance has no authorised networks, so the database is never reachable from the public internet. Locally, the application connects over TCP to a PostgreSQL container.
 
 - **Encryption:** Cloud SQL default encryption at rest and in transit. Application-level field encryption was considered and left out as overkill.
 
 - **Backups:** automated Cloud SQL backups every night, kept in europe-west1, in acceptance as in production (the acceptance data is fictitious, but the cost is negligible and a restore can be tried there first). Production also has point-in-time recovery and deletion protection.
 
-- **Data minimisation:** national numbers and IBANs live only in the workers table. They leave the database only where strictly needed: the IBAN in the payment export, the national number in Dimona calls and in the 281.27 / Belcotax output. They are never written to logs. An unexpected error shows a general message in the browser, never its technical details, and a database error never carries the values it was given into the logs or the page; a worker that cannot be saved gives a French message instead. The IBAN in the organisation details (section 7.7) is BMC's own account, not personal data.
+- **Data minimisation:** national numbers and IBANs live only in the workers table. They leave the database only where strictly needed: the IBAN in the payment export, the national number in Dimona calls and in the 281.27 / Belcotax output. They are never written to logs, and the MCP server cannot read them (section 15.4). An unexpected error shows a general message in the browser, never its technical details, and a database error never carries the values it was given into the logs or the page; a worker that cannot be saved gives a French message instead. The IBAN in the organisation details (section 7.7) is BMC's own account, not personal data.
 
 - **Document storage:** every contract and qualification is backed by its original uploaded file. Files are stored unmodified (not parsed) in a private Google Cloud Storage bucket, one for acceptance and one for production (dimonapp-acc-documents, dimonapp-prod-documents), in europe-west1. The database only holds metadata and the object path. The bucket is not public; files are served to admins through the application only. The bucket is named by the setting STORAGE_BUCKET; the application reaches it as the service account of the Cloud Run service, without any key file. Without that setting (the local test environment) the files go to a local folder.
 
@@ -622,7 +638,7 @@ Cancellation never edits or deletes the original activity data; it only sets the
 
 ## 11. Data model
 
-Eight tables, all simple one-to-many relations, plus two tables for the sign-in (11.9 and 11.10). Immutability is achieved by copying the compensation onto each activity, so an activity never depends on data that may change later.
+Eight tables, all simple one-to-many relations, plus two tables for the sign-in (11.9 and 11.10). Immutability is achieved by copying the compensation onto each activity, so an activity never depends on data that may change later. The MCP server reads views over these tables and none of the tables themselves (section 15.4).
 
 ### 11.1 workers
 
@@ -764,6 +780,8 @@ The last action of every signed-in account, for the 30 idle minutes (R4.13).
 
 - **Secrets:** Secret Manager in the cloud, git-ignored .env locally, never in the image or repository.
 
+- **Privacy of the MCP server:** no personal data, no direct identifiers, and no pay or banking data leaves the database or is exposed to the model. Aggregates are not anonymous in an organisation this small: "the only flexi-jobber worked on Tuesday" points to one person. The guarantee is about identifiers and sensitive attributes, not anonymity (section 15.1).
+
 ## 13. Out of scope
 
 - Audit log of user and admin actions.
@@ -788,6 +806,8 @@ The last action of every signed-in account, for the 30 idle minutes (R4.13).
 
 - Giving stages as an activity type.
 
+- In the MCP server (section 15): any euro amount; access for workers; any question about one person; free text typed by workers or returned by the RSZ; free-form queries (such as text to SQL); write actions of any kind.
+
 ## 14. Open items
 
 | **\#** | **Item**                                                                                                                                                                                                                | **Owner** |
@@ -800,6 +820,139 @@ The last action of every signed-in account, for the 30 idle minutes (R4.13).
 | 6      | Closed in version 4.5: five wrong passwords lock a username for 15 minutes (R4.14). | BMC       |
 | 7      | Confirm the sector on the fiche 281.27 (zone 2.099): the application uses A, the sports sector. Compare a generated PDF with the official model of the fiche, and try the XML in the validation module of Belcotax-on-web before the first submission. | BMC       |
 | 8      | Confirm whether the RSZ accepts several flexi-job periods for one worker on one day when their hours do not overlap. Until then every flexi-job activity is declared on its own; if the RSZ refuses the second one as a duplicate, flexi-jobs need the same update of the day's period as article 17 (section 8), with start and end times instead of hours. The RSZ test service does not process flexi-jobs (item 3), so this can only be checked in production. | BMC       |
+| 9      | Closed in version 4.14: the MCP service signs in to the database as the Cloud SQL IAM user of its service account, with an access token of that account as the password of each connection over Cloud Run's built-in connection; no extra library is needed (section 15.4). | BMC       |
+
+## 15. MCP server
+
+An admin can ask an AI assistant, such as Claude, questions about the declared activities: how many hours were declared this week, whether every weekday had a declaration, whether there are anomalies, which activities took place on which day, whether the current month looks correct. The MCP server answers them. MCP, the Model Context Protocol, is the open standard through which an AI assistant calls the tools of a server. The server has a fixed set of curated tools that read aggregates; it changes nothing and accepts no free-form query. It is a separate service next to the application, built with the standalone fastmcp package (section 3.6).
+
+### 15.1 Privacy rule
+
+**No personal data, no direct identifiers, and no pay or banking data leaves the database or is exposed to the model.**
+
+- What the server returns is limited to hours, counts, dates, activity types, worker types, Dimona statuses and activity ids.
+
+- It never returns a name, e-mail address, username, national register number, IBAN, postal address or worker id.
+
+- It never returns an amount in euro: no compensation, rate, supplement amount, month cost, euro limit or euro total.
+
+- It never returns free text: not the short description (typed by workers, it can hold names, and text that tries to steer the model), not the Dimona message (raw text of the RSZ, it can hold identifiers), and not the Dimona declaration ID.
+
+- Anything that needs a human follow-up comes back as an activity id and its date. The admin then opens the application, where access control already exists.
+
+- **The limit of the guarantee:** aggregates are not anonymous in an organisation this small. "The only flexi-jobber worked on Tuesday" points to one person. The guarantee is about identifiers and sensitive attributes, not about anonymity. For the same reason there is no per-person query: an admin who needs to know about one person uses the application.
+
+The rule is enforced in four layers, so a mistake in one of them does not leak: the database (section 15.4), the code (curated tools whose outputs have no field for the data above, section 15.5), the infrastructure (a service account that cannot reach the application's secrets or documents, section 15.3), and tests that look for the seeded personal data in every output (section 15.6).
+
+### 15.2 Access levels and endpoints
+
+There are two access levels, each on its own endpoint of the MCP service.
+
+- **Public, `/public/mcp`:** no sign-in and no database connection. It says it is the DimonAPP MCP server, summarises what the full tools can do and says they need sign-in as an active BMC admin. Nothing else. It lets anyone check that the server is up.
+
+- **Signed in, `/mcp`:** Google sign-in through FastMCP's GoogleProvider (section 3.6), then an admin check. Only an e-mail that is an active row of the admins table gets in, matched trimmed and in lower case, as the application matches it. Every other account is refused, a Google worker account included. An admin sees aggregates over all workers.
+
+- **Why two endpoints:** once FastMCP has a sign-in configured, it refuses a request without a valid token before any tool is reached. Anonymous and signed-in access therefore cannot share one endpoint.
+
+- **Guardrail:** the tools of `/mcp` are only served when sign-in is configured, and in acceptance and production the MCP service refuses to start without it, as the application refuses to start there without the Dimona settings (section 3.3). So the data tools are never online without sign-in. Locally (TEST) the tools may run without sign-in, against the fake data of the local database only, to try them with an MCP client on the developer's machine. The service then makes sure it is on that machine: it refuses to start when it does not listen on a loopback address (127.0.0.1, localhost or ::1, as make mcp sets it) or when it runs in Cloud Run, which names its service in the environment variable K_SERVICE. So a deployment with APP_ENV set to TEST by mistake does not put the data tools online without sign-in. It also refuses every request whose Host or Origin header is not that machine, so a web page the developer opens cannot reach the tools through DNS rebinding. With sign-in no such check is needed: a web page cannot add the token of an admin to a request.
+
+### 15.3 Service and infrastructure
+
+- **Its own Cloud Run service** per environment, `dimonapp-mcp-<env>`, next to the service of the application (`dimonapp-<env>`). Same Docker image, another start command. Acceptance and production each have one (`dimonapp-mcp-acc` and `dimonapp-mcp-prod`).
+
+- The MCP service never applies migrations: it signs in to the database with a read-only role, and relies on the application's service, which migrates at start-up (section 3.6).
+
+- At most one instance, like the application; it scales to zero when nobody uses it.
+
+- **Transport:** Streamable HTTP in GCP; stdio or local HTTP on the developer's machine, for Claude Desktop, Claude Code or the MCP Inspector.
+
+- **Its own service account**, `dimonapp-mcp-<env>`: a Cloud SQL client of the instance of its own environment only, that can read only its own secrets and use only its own bucket of sign-in state. It has no access to the Dimona key, to the secrets of the application (database URL, cookie secret, Google client secret) or to the document bucket.
+
+- **Its own Google OAuth client**, with the redirect address of the MCP service (FastMCP's default path is `/auth/callback`), on BMC's existing Internal consent screen. The consent step of the OAuth proxy stays on.
+
+- **Known MCP clients only:** the OAuth proxy sends a sign-in back only to the redirect address of a known MCP client: Claude (`https://claude.ai/api/mcp/auth_callback`, or the same path on claude.com) and an address on the admin's own machine (`http://localhost` or `http://127.0.0.1`, any port and path), for Claude Code, the MCP Inspector and FastMCP's client. Anyone may register a client with the proxy, so without this rule someone could register one that sends the sign-in to an address of their own, and lure an admin into approving it on the consent step. A client with any other redirect address is refused, at registration and at sign-in. Another MCP client gets in only after its redirect address is added to the code.
+
+- **Sign-in state:** the OAuth proxy stores the client registrations it hands out and the Google tokens it holds for them. The disk of a Cloud Run instance does not survive a restart or a scale to zero, so this store is persistent and encrypted: a Cloud Storage bucket of its own, `dimonapp-mcp-<env>-oauth`, which Cloud Run mounts as a folder, with every value encrypted by a key derived from the signing key. The tokens are signed with a key of its own, kept in Secret Manager. A new signing key makes the stored values unreadable, so MCP clients then simply sign in again. Anyone can register an MCP client with the proxy without signing in, and the proxy never deletes what it stores, so a lifecycle rule of Cloud Storage deletes every file of the store 30 days after it was last written; the folders of the mount stay. A token in use is written again whenever it is refreshed. A client registration is not, so an MCP client that registered with the proxy signs in again once its registration is 30 days old. Claude does not register: it names itself by the address of a client description (CIMD), which the proxy does not store, so the rule does not make Claude sign in again.
+
+### 15.4 Database access
+
+The database enforces the privacy rule, not only the code.
+
+1. **A dedicated read-only role.** The MCP service signs in to the database with a role of its own, never with the role of the application: the Cloud SQL IAM database user of its service account. A fresh access token of that account is the password of every new connection, so there is no database password at all. A role with a password, whose connection URL is a secret only the MCP service account can read, remains the fallback should IAM sign-in stop working. Either way the user gets its rights as a member of dimonapp_mcp, a role that cannot sign in itself and holds the grants of the migration, so the grants do not depend on how the user signs in. Locally, make mcp-user creates such a user with a password in the local database.
+
+2. **Views only.** The role gets SELECT on purpose-built views and on nothing else. It has no privilege on any table, in particular not on workers, authorisations, compensation_rates, organisation_config, sign_in_failures, last_actions or admins. A PostgreSQL view runs with the rights of its owner by default (security_invoker is not set), so the role reads the views without any access to the tables below them. The views, the functions below and the grants are created in an Alembic migration, in a schema of their own, mcp, so they are never mistaken for the tables of the application.
+
+3. **The activities view** keeps the id, activity date, activity type, duration in hours, start time, worker type, Dimona status, cancelled flag and creation time, and the worker id, only as a key to group by: no tool returns it. It leaves out every euro column (rate_applied, supplement_amount, compensation_amount), the description, the Dimona message and the Dimona declaration ID.
+
+4. **Reference views:** the activity types (code, French label, compensation model, whether a description is required, the supplement offered) and the yearly limits with their hours values (hours limit, minimum hours per activity) and, for the euro limit, only whether it is filled in, never its amount.
+
+5. **Limit thresholds without euros.** A euro limit cannot be checked outside the database without a euro total leaving it. The comparison is therefore made inside the database, by a view or function that only returns, per year, period, worker type and limit kind (hours or euro), the number of workers at or above 90 % of the limit. It follows the rule of the dashboard flags (section 10): counted activities declared under the worker's current type, only years with a complete set of limits, never a freelancer. For an hours limit it also gives the limit. It never gives a total or a ratio: a ratio multiplied by a published legal limit gives the pay back.
+
+6. **Admin check without reading accounts.** A SECURITY DEFINER function, is_active_admin(email) returning true or false, compares the trimmed, lower-case e-mail with the active rows of the admins table, with a fixed search_path. The role may execute it and cannot read the admins table itself.
+
+### 15.5 Tools, resource and prompt
+
+Common rules for every tool of `/mcp`:
+
+- A period runs from a start date to an end date, both included, and is at most 366 days; a longer one is refused with a clear message.
+
+- Counted activities are those of section 12: not cancelled and not Dimona-rejected. Pending activities count.
+
+- Names of tools, parameters and fields, descriptions and fixed texts are in English. Dates are ISO 8601 (YYYY-MM-DD) and hours are plain numbers. Activity types are given with their code and the French label as stored; worker types and Dimona statuses with their codes (for example article_17, pending). This is the second exception to the French interface (section 3.4).
+
+- Every output is a typed model whose schema MCP clients can read. None of these models has a field for the data of section 15.1.
+
+- An unexpected error reaches the MCP client as a fixed message that only names the tool, resource or prompt, never with its technical details: the message of a database error, for example, names the database instance and its user. The clear messages that the tools give on purpose, such as a refused period, still reach the client.
+
+Tools:
+
+- **summarise_period(start, end):** the counted hours and the number of counted activities per activity type and per worker type, the number of distinct workers with a counted activity, and the number of cancelled, Dimona-rejected and pending activities.
+
+- **list_daily_activities(start, end):** every day of the period in order, with its weekday, and on each day the counted activities: id, activity type, hours, start time for a flexi-job, worker type and Dimona status. A day without any counted activity is listed explicitly, without activities.
+
+- **find_anomalies(start, end):** everything that needs a look, of these kinds, each with the activity ids and dates involved, the figures that explain it and a fixed English explanation:
+
+  - pending Dimona, with the number of days since the activity was declared;
+
+  - rejected Dimona;
+
+  - cancelled activities;
+
+  - long activity: a counted activity of more than 5 hours, whatever its activity type;
+
+  - long day: the counted activities of one worker on one day add up to more than 8 hours;
+
+  - many days in a week: one worker has counted activities on more than 2 days of one week (Monday to Sunday); every week that overlaps the period is checked over the whole week;
+
+  - flexi-job under the minimum: a counted flexi-job activity below the minimum hours per activity of its year (the submission gate refuses these, section 6.1, so they only appear when the minimum was set or raised after the declaration);
+
+  - year without complete limits: a year of the period with counted activities but without a complete set of limits (section 10);
+
+  - limits at the threshold: the counts of workers at or above 90 % of section 15.4 point 5, for the years of the period.
+
+  The long day and the many days in a week concern one worker but name nobody: they give the activities and their dates, never a worker id. The 5 hours, 8 hours and 2 days are constants in the code, as the 90 % threshold is.
+
+- **review_month(year, month):** the answer to "does this month look correct?": the summary of the month, its days without a counted activity, and its anomalies.
+
+Resource: the catalogue of the activity types: code, French label, compensation model (hourly or fixed price) and the supplement offered, without any rate.
+
+Prompt: a monthly review for a given year and month. It asks the model to call review_month, go through the summary, the empty days and each anomaly, give the activity ids and dates that need a follow-up in the application, and answer in French.
+
+The public endpoint has a single tool that gives the description of section 15.2, and server instructions that say the same.
+
+### 15.6 Verification and documentation
+
+- The tools are tested with FastMCP's in-memory client against the server, in the existing pytest and testcontainers set-up (section 3.6).
+
+- **Leak test:** with the fake data of the local database (section 4), every tool is called, and every resource and prompt is read. No seeded first name, last name, e-mail address, username, national register number, IBAN, street, postal code or city, and no euro amount, may appear in any output.
+
+- **Privilege test:** signed in as the role of the MCP service, a SELECT on workers, or on any other table, fails with "permission denied", while the views and is_active_admin work.
+
+- **Sign-in tests:** `/mcp` refuses a request without a token, and refuses the token of an account that is not an active admin. `/public/mcp` answers without a token and offers no data tool.
+
+- **Guardrail test:** the MCP service refuses to start in acceptance or production without sign-in, and without sign-in in test it refuses to start on an address other than a loopback one or in Cloud Run, and refuses a request addressed to another host. An unexpected error reaches the client without its details.
+
+- **README:** the README of the repository describes what the MCP server does, the privacy rule and the limit of its guarantee (section 15.1), and the four layers that enforce it. Readers cannot sign in to `/mcp`, so it shows a short recording (20 to 30 seconds) made on the fictitious data of acceptance: one question whether a month looks correct and one question about anomalies, with nothing personal visible in the window of the client.
 
 ## Appendix A. Requirements list
 
@@ -815,16 +968,16 @@ A numbered list of every requirement in this document, grouped by area. Each req
 | R1.5    | The user interface shall be built with Streamlit, as a tab-based web application.                                                                                                                                                                                                                                                                                                                                                                            | 3.1          |
 | R1.6    | The application shall be packaged as a single Docker image used for all environments.                                                                                                                                                                                                                                                                                                                                                                        | 3.1          |
 | R1.7    | The application shall run on Google Cloud Platform, on Cloud Run.                                                                                                                                                                                                                                                                                                                                                                                            | 3.1          |
-| R1.8    | The application shall be publicly reachable over HTTPS and require authentication for every page.                                                                                                                                                                                                                                                                                                                                                            | 3.1          |
+| R1.8    | The application shall be publicly reachable over HTTPS and require authentication for every page; the only part without sign-in shall be the public endpoint of the MCP server, which holds no data (R20.5).                                                                                                                                                                                                                                                                                                                                                            | 3.1          |
 | R1.9    | Database access shall use SQLAlchemy 2.0 with the psycopg 3 driver.                                                                                                                                                                                                                                                                                                                                                                                          | 3.6          |
-| R1.10   | Schema changes shall be managed with Alembic migrations, committed in the repository and applied automatically at container start-up.                                                                                                                                                                                                                                                                                                                        | 3.6          |
+| R1.10   | Schema changes shall be managed with Alembic migrations, committed in the repository and applied automatically when the container of the application starts; the MCP service shall not migrate (R20.8).                                                                                                                                                                                                                                                                                                                        | 3.6          |
 | R1.11   | Automated tests shall use pytest; database tests shall run against a PostgreSQL started by testcontainers, and the Dimona API shall be mocked in all tests.                                                                                                                                                                                                                                                                                                  | 3.6          |
-| R1.12   | The Cloud Run service shall run with at most one instance.                                                                                                                                                                                                                                                                                                                                                                                                   | 3.6          |
+| R1.12   | The Cloud Run service of the application, and that of the MCP server, shall each run with at most one instance.                                                                                                                                                                                                                                                                                                                                                                                                   | 3.6          |
 | **R2**  | **Environments, configuration and secrets**                                                                                                                                                                                                                                                                                                                                                                                                                  | **3.2, 3.3** |
-| R2.1    | There shall be three environments: test, acceptance and production. Acceptance and production shall each consist of its own Cloud Run service and its own Cloud SQL database in GCP; test shall run locally against a local PostgreSQL with fake data and shall not be deployed to GCP. | 3.2          |
+| R2.1    | There shall be three environments: test, acceptance and production. Acceptance and production shall each consist of its own Cloud Run service for the application and its own Cloud SQL database in GCP, and may have a second Cloud Run service for the MCP server (R20.8); test shall run locally against a local PostgreSQL with fake data and shall not be deployed to GCP. | 3.2          |
 | R2.2    | The environments shall be identical in schema and configuration shape; they shall differ only in the environment name and in injected configuration values (database connection, storage bucket, Dimona identifiers and key). | 3.2          |
 | R2.3    | The test environment shall make no Dimona call (a fake service answers); acceptance shall call the RSZ Dimona test service; production shall call the live service. The service shall follow from the environment name alone. | 3.2          |
-| R2.4    | The code shall read all configuration and secrets from environment variables; the environment name shall only decide the sidebar label and the Dimona service. | 3.3          |
+| R2.4    | The code shall read all configuration and secrets from environment variables; the environment name shall only decide the sidebar label, the Dimona service and whether the MCP server may run without sign-in (R20.7). | 3.3          |
 | R2.5    | Locally, environment variables shall be loaded from a git-ignored .env file.                                                                                                                                                                                                                                                                                                                                                                                 | 3.3          |
 | R2.6    | In GCP, the configuration shall be set on the Cloud Run service at deploy time, for acceptance and for production; every secret shall be injected from GCP Secret Manager. | 3.3          |
 | R2.7    | No secret (Dimona certificate, API key, database password) shall be stored in the Docker image or the repository.                                                                                                                                                                                                                                                                                                                                            | 3.3          |
@@ -845,7 +998,7 @@ A numbered list of every requirement in this document, grouped by area. Each req
 | R4.5    | Local passwords shall be stored as a hash only, never in plain text.                                                                                                                                                                                                                                                                                                                                                                                         | 2            |
 | R4.6    | A person holding both roles shall use two separate accounts.                                                                                                                                                                                                                                                                                                                                                                                                 | 2            |
 | R4.7    | An inactive worker shall not be able to sign in.                                                                                                                                                                                                                                                                                                                                                                                                             | 7.2          |
-| R4.8    | Google sign-in shall use Streamlit's built-in OIDC login (st.login, st.user, st.logout); the signed-in e-mail shall be matched against admins and active Google workers, and any other e-mail refused.                                                                                                                                                                                                                                                       | 3.6          |
+| R4.8    | Google sign-in to the application shall use Streamlit's built-in OIDC login (st.login, st.user, st.logout); the signed-in e-mail shall be matched against admins and active Google workers, and any other e-mail refused.                                                                                                                                                                                                                                                       | 3.6          |
 | R4.9    | Local passwords shall be hashed with Argon2.                                                                                                                                                                                                                                                                                                                                                                                                                 | 3.6          |
 | R4.10   | Streamlit's secrets.toml shall be generated at start-up from environment variables and never committed or built into the image.                                                                                                                                                                                                                                                                                                                              | 3.6          |
 | R4.11   | At start-up, the Google address of the setting FIRST_ADMIN_EMAIL shall become the admin when the admins table is empty; with an admin present the setting shall change nothing. | 2            |
@@ -965,15 +1118,39 @@ A numbered list of every requirement in this document, grouped by area. Each req
 | R17.4   | Every action calling the Dimona API shall end with an explicit success, error or warning message.                                                                                                                                                                                                                                                                                                                                                            | 12           |
 | R17.5   | The code shall favour readability and testability over abstraction.                                                                                                                                                                                                                                                                                                                                                                                          | 12           |
 | **R18** | **Language, common layout, help and versioning**                                                                                                                                                                                                                                                                                                                                                                                                             | **3.4**      |
-| R18.1   | The whole user interface shall be in French, including messages, errors, month names and number formatting; the only exception is the English menus of the interactive Activities table (R19.1). | 3.4          |
+| R18.1   | The whole user interface shall be in French, including messages, errors, month names and number formatting; the only exceptions are the English menus of the interactive Activities table (R19.1) and the MCP server, whose output is read by an AI model (R20.19). | 3.4          |
 | R18.2   | Every page, including the login page, shall follow the DimonAPP V2 look: default Streamlit light theme, logoarriere logo at the top of a left sidebar, title "DimonAPP" with a subtitle, and tabs whose content starts with the tab name as heading.                                                                                                                                                                                                         | 3.4          |
 | R18.3   | The application shall use two logos: favicon.png as browser favicon and as iOS home screen icon (served as apple-touch-icon), and logoarriere.png at the top of the sidebar inside the application.                                                                                                                                                                                                                                                          | 3.4          |
 | R18.4   | The sidebar shall show, in this order and without an "About" heading: "DimonAPP" with a TEST, ACC or PROD label, a one-line explanation, "Connecté en tant que :" with "\<name\> - \<type\>" in bold on the next line (type: Volontaire, Article 17, Flexijob, Indépendant or Admin), the "Comment utiliser la DimonAPP ?" heading with the "Consulter les SOPs" button, and the "Se déconnecter" heading with the "Se déconnecter" button, without lines or extra space between the blocks. | 3.4          |
 | R18.5   | The "Consulter les SOPs" button shall open https://www.brusselsmonkeysclimbing.com/sop in a new browser tab, in the worker view, the admin console and on the login page.                                                                                                                                                                                                                                                                                    | 3.4          |
 | R18.6   | The environment label shall read "TEST" in the test environment, "ACC" in acceptance and "PROD" in production. | 3.4          |
 | R18.7   | Every page shall show a full-width footer reading "V\<x.y.z\> - © \<current year\> Brussels Monkeys Climbing" with a link to www.brusselsmonkeysclimbing.com.                                                                                                                                                                                                                                                                                    | 3.4          |
-| R18.8   | The version shall follow semantic versioning with 3.0.0 as the first release, be a pre-release of it raised with every pull request until that release (betas 3.0.0bN during the build, then release candidates 3.0.0rcN), be defined in one place in the code and be built into the Docker image, so the footer always shows the deployed version. | 3.4          |
+| R18.8   | The version shall follow semantic versioning, be raised with every pull request, be defined in one place in the code and be built into the Docker image, so the footer always shows the deployed version. 3.0.0 is the first release, after betas 3.0.0bN and release candidates 3.0.0rcN; work towards a next version shall be a series of pre-releases of it, the 3.1.0 alphas (3.1.0aN) for the MCP server, released as 3.1.0. | 3.4          |
 | R18.9   | Withdrawn. The footer does not name the Dimona service: the service follows from the environment (R2.3), which the sidebar shows (R18.6). | 3.4          |
 | R18.10  | The application shall serve a web app manifest, linked from the served page, that names it "DimonAPP", opens it on its start page without the browser bar and gives the favicon as a 192 x 192 and a 512 x 512 px maskable icon (a full orange square with the climber inside the central 80 %), so Android shows it on the home screen. | 3.4 |
 | **R19** | **Activities overview** | **7.8** |
 | R19.1   | The admin console shall have an Activities tab showing, for a month chosen with previous and next arrows, every activity of every worker in a read-only table with the columns of the Monthly overview and the worker's name. | 7.8 |
+| **R20** | **MCP server** | **15** |
+| R20.1   | A read-only MCP server, built with the standalone fastmcp package at a pinned version, shall answer aggregate questions about the activities through curated tools only; it shall change nothing and accept no free-form query. | 15 |
+| R20.2   | No personal data, no direct identifiers, and no pay or banking data shall leave the database or be exposed to the model: the output shall be limited to hours, counts, dates, activity types, worker types, Dimona statuses and activity ids, and shall never hold a name, e-mail address, username, national register number, IBAN, postal address or worker id. | 15.1 |
+| R20.3   | The MCP server shall never return an amount in euro: no compensation, rate, supplement amount, month cost, euro limit or euro total. | 15.1 |
+| R20.4   | The MCP server shall never return free text: not the short description, the Dimona message or the Dimona declaration ID. A follow-up shall be given as an activity id and its date. | 15.1 |
+| R20.5   | The public endpoint /public/mcp shall need no sign-in and open no database connection; it shall only say that it is the DimonAPP MCP server, what the full tools can do and that they need sign-in as an active admin. | 15.2 |
+| R20.6   | The endpoint /mcp shall require Google sign-in through FastMCP's GoogleProvider and let in only an e-mail that is an active admin, matched trimmed and in lower case; every other account, a Google worker account included, shall be refused. | 15.2 |
+| R20.7   | The tools of /mcp shall only be served when sign-in is configured, and the MCP service shall refuse to start in acceptance or production without it; in test, where /mcp may be served without sign-in, the service shall then refuse to start unless it listens on a loopback address outside Cloud Run, and shall refuse a request whose Host or Origin is not that machine. | 15.2 |
+| R20.8   | The MCP server shall run as a Cloud Run service of its own per environment (dimonapp-mcp-\<env\>, in acceptance and in production), from the same image as the application, with at most one instance, over Streamable HTTP, without applying migrations. | 15.3 |
+| R20.9   | The MCP service shall run as a service account of its own that may use only the Cloud SQL instance of its own environment, reads only its own secrets and has no access to the Dimona key, the secrets of the application or the document bucket; it shall have a Google OAuth client of its own, and keep the state of its OAuth proxy in a persistent, encrypted store, signed with a key of its own from Secret Manager, from which every file is deleted 30 days after it was last written. | 15.3 |
+| R20.10  | The MCP service shall sign in to the database with a dedicated read-only role that has SELECT on purpose-built views only and no privilege on any table; the views, functions and grants shall be created in an Alembic migration. | 15.4 |
+| R20.11  | The activities view shall leave out every euro column, the description, the Dimona message and the Dimona declaration ID; it shall keep the worker id only as a key to group by, which no tool returns. | 15.4 |
+| R20.12  | The legal limits shall be checked inside the database, following the rule of the dashboard flags, and only the number of workers at or above 90 % per year, period, worker type and limit kind shall come out, with the limit for an hours limit; never a total or a ratio. | 15.4 |
+| R20.13  | The admin check shall go through a SECURITY DEFINER function is_active_admin(email) with a fixed search_path, which the role may execute while it cannot read the admins table. | 15.4 |
+| R20.14  | The tool summarise_period(start, end) shall give the counted hours and number of counted activities per activity type and per worker type, the number of distinct workers, and the number of cancelled, Dimona-rejected and pending activities. | 15.5 |
+| R20.15  | The tool list_daily_activities(start, end) shall give every day of the period with its weekday and its counted activities (id, activity type, hours, start time for a flexi-job, worker type, Dimona status), listing days without any explicitly. | 15.5 |
+| R20.16  | The tool find_anomalies(start, end) shall give, with the activity ids and dates involved: pending Dimona with its age in days, rejected Dimona, cancellations, counted activities of more than 5 hours, more than 8 counted hours of one worker on one day, one worker on more than 2 days of one week (Monday to Sunday), flexi-jobs under the minimum hours, years with counted activities but incomplete limits, and the counts of R20.12. | 15.5 |
+| R20.17  | The tool review_month(year, month) shall give the summary of the month, its days without a counted activity and its anomalies. | 15.5 |
+| R20.18  | The MCP server shall offer the catalogue of the activity types as a resource (code, French label, compensation model, supplement, without any rate) and a monthly review prompt that walks through review_month and asks for an answer in French. | 15.5 |
+| R20.19  | Tool, parameter and field names, descriptions and fixed texts shall be in English, dates in ISO 8601 and hours plain numbers, with the activity types under their French labels as stored; a period shall run from a start to an end date, both included, of at most 366 days. | 15.5 |
+| R20.20  | Tests shall show that no seeded personal data or euro amount appears in any output of the MCP server, that its database role cannot read any table, that /mcp refuses a request without a token or from an account that is not an active admin, that /public/mcp answers without a token and offers no data tool, that the service refuses to start in acceptance or production without sign-in, and that without sign-in in test it refuses to start off a loopback address or in Cloud Run and refuses a request addressed to another host. | 15.6 |
+| R20.21  | The README shall describe the MCP server, the privacy rule and the limit of its guarantee, and the four layers that enforce it, with a short recording made on the fictitious data of acceptance. | 15.6 |
+| R20.22  | An unexpected error of the MCP server shall reach the MCP client only as a fixed message without its technical details; the clear messages that the tools give on purpose, such as a refused period, shall still reach it. | 15.5 |
+| R20.23  | The OAuth proxy of the MCP server shall send a sign-in back only to the redirect address of a known MCP client, Claude or an address on the admin's own machine, and refuse a client with any other redirect address, at registration and at sign-in. | 15.3 |
